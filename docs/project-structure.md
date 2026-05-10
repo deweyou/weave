@@ -46,12 +46,9 @@ weave/
     logs/
 
   docs/
-    architecture/
-      phase-0.md
-    decisions/
-      0001-runtime-split.md
-    phase-0-runtime-boundaries.md
+    architecture.md
     project-structure.md
+    runtime-boundaries.md
     superpowers/
 ```
 
@@ -104,7 +101,8 @@ Phase 0 may start the Python service manually with `make agent-dev` before launc
 - [apps/desktop/src-tauri/src/agent.rs](../apps/desktop/src-tauri/src/agent.rs#L1) - Rust HTTP client for Python agent service.
 - [apps/desktop/src-tauri/src/storage.rs](../apps/desktop/src-tauri/src/storage.rs#L1) - local data initialization.
 - [services/agent/app/main.py](../services/agent/app/main.py#L1) - FastAPI app and Phase 0 routes.
-- [docs/phase-0-runtime-boundaries.md](phase-0-runtime-boundaries.md#L1) - runtime ownership and cross-layer rules.
+- [docs/architecture.md](architecture.md#L1) - current architecture and startup flow.
+- [docs/runtime-boundaries.md](runtime-boundaries.md#L1) - runtime ownership and cross-layer rules.
 - [docs/superpowers/specs/2026-05-10-weave-phase-0-design.md](superpowers/specs/2026-05-10-weave-phase-0-design.md#L1) - Phase 0 design source of truth.
 
 ---
