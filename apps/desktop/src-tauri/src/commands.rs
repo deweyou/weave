@@ -1,6 +1,9 @@
 use serde::Serialize;
 
-use crate::storage::{initialize_local_paths, LocalPaths};
+use crate::{
+    agent::{agent_base_url, discover, health_check, DiscoverResponse, HealthResponse},
+    storage::{initialize_local_paths, LocalPaths},
+};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +31,7 @@ pub fn get_app_info() -> AppInfo {
 pub fn get_runtime_status() -> Result<RuntimeStatus, String> {
     let paths = initialize_local_paths()?;
     Ok(RuntimeStatus {
-        agent_base_url: "http://127.0.0.1:8765".to_string(),
+        agent_base_url: agent_base_url().to_string(),
         data_root: paths.data_root,
     })
 }
@@ -36,4 +39,14 @@ pub fn get_runtime_status() -> Result<RuntimeStatus, String> {
 #[tauri::command]
 pub fn get_local_paths() -> Result<LocalPaths, String> {
     initialize_local_paths()
+}
+
+#[tauri::command]
+pub async fn agent_health_check() -> Result<HealthResponse, String> {
+    health_check().await
+}
+
+#[tauri::command]
+pub async fn agent_discover(input: String) -> Result<DiscoverResponse, String> {
+    discover(input).await
 }

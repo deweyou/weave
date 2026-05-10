@@ -1,3 +1,4 @@
+mod agent;
 mod commands;
 mod storage;
 
@@ -8,6 +9,8 @@ pub fn run() {
             commands::get_app_info,
             commands::get_runtime_status,
             commands::get_local_paths,
+            commands::agent_health_check,
+            commands::agent_discover,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
