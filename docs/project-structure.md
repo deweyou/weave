@@ -21,12 +21,14 @@ weave/
   AGENTS.md
   CLAUDE.md
   LICENSE
+  Makefile
   package.json
   pnpm-workspace.yaml
-  Makefile
 
   apps/
     desktop/
+      index.html
+      package.json
       src/
       src-tauri/
 
@@ -44,14 +46,16 @@ weave/
     logs/
 
   docs/
-    project-structure.md
-    phase-0-runtime-boundaries.md
     architecture/
+      phase-0.md
     decisions/
+      0001-runtime-split.md
+    phase-0-runtime-boundaries.md
+    project-structure.md
     superpowers/
 ```
 
-Some paths above are target Phase 0 paths and may not exist until implementation begins. The current repository starts from [AGENTS.md](../AGENTS.md#L1), [CLAUDE.md](../CLAUDE.md#L1), [LICENSE](../LICENSE#L1), and the Phase 0 design spec at [docs/superpowers/specs/2026-05-10-weave-phase-0-design.md](superpowers/specs/2026-05-10-weave-phase-0-design.md#L1).
+The current implementation includes the Phase 0 desktop UI, Tauri bridge, Python agent service, local `data/` placeholders, and knowledge docs. [CLAUDE.md](../CLAUDE.md#L1) is a symlink to [AGENTS.md](../AGENTS.md#L1).
 
 ## Startup Path
 
@@ -92,9 +96,16 @@ Phase 0 may start the Python service manually with `make agent-dev` before launc
 ## Key Files
 
 - [AGENTS.md](../AGENTS.md#L1) - root navigation and task routing for agents.
+- [apps/desktop/src/main.tsx](../apps/desktop/src/main.tsx#L1) - React entry point.
+- [apps/desktop/src/App.tsx](../apps/desktop/src/App.tsx#L1) - Phase 0 verification UI.
+- [apps/desktop/src/tauri.ts](../apps/desktop/src/tauri.ts#L1) - typed frontend wrappers around Tauri commands.
+- [apps/desktop/src-tauri/src/lib.rs](../apps/desktop/src-tauri/src/lib.rs#L1) - Tauri command registration.
+- [apps/desktop/src-tauri/src/commands.rs](../apps/desktop/src-tauri/src/commands.rs#L1) - Rust command handlers.
+- [apps/desktop/src-tauri/src/agent.rs](../apps/desktop/src-tauri/src/agent.rs#L1) - Rust HTTP client for Python agent service.
+- [apps/desktop/src-tauri/src/storage.rs](../apps/desktop/src-tauri/src/storage.rs#L1) - local data initialization.
+- [services/agent/app/main.py](../services/agent/app/main.py#L1) - FastAPI app and Phase 0 routes.
 - [docs/phase-0-runtime-boundaries.md](phase-0-runtime-boundaries.md#L1) - runtime ownership and cross-layer rules.
 - [docs/superpowers/specs/2026-05-10-weave-phase-0-design.md](superpowers/specs/2026-05-10-weave-phase-0-design.md#L1) - Phase 0 design source of truth.
 
 ---
-*Last updated: 2026-05-10 | Reason: initial knowledge base setup*
-
+*Last updated: 2026-05-10 | Reason: Phase 0 implementation refresh*

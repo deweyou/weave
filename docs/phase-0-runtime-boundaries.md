@@ -56,6 +56,16 @@ Python should expose only these initial HTTP routes:
 
 `start_agent_service` is intentionally secondary. The first working implementation may require manual `make agent-dev`, then add service lifecycle management after the health and discover bridge is stable.
 
+## Implemented Phase 0 Surface
+
+- React wrapper functions live in [apps/desktop/src/tauri.ts](../apps/desktop/src/tauri.ts#L1).
+- Tauri command registration lives in [apps/desktop/src-tauri/src/lib.rs](../apps/desktop/src-tauri/src/lib.rs#L1).
+- Rust command handlers live in [apps/desktop/src-tauri/src/commands.rs](../apps/desktop/src-tauri/src/commands.rs#L1).
+- Rust-to-Python HTTP calls live in [apps/desktop/src-tauri/src/agent.rs](../apps/desktop/src-tauri/src/agent.rs#L1).
+- Local data initialization lives in [apps/desktop/src-tauri/src/storage.rs](../apps/desktop/src-tauri/src/storage.rs#L1).
+- Python routes live in [services/agent/app/main.py](../services/agent/app/main.py#L1).
+- Python request and response models live in [services/agent/app/schemas/writing.py](../services/agent/app/schemas/writing.py#L1).
+
 ## Deferred Work
 
 - Real model providers and API keys.
@@ -71,5 +81,4 @@ Python should expose only these initial HTTP routes:
 - [AGENTS.md](../AGENTS.md#L1) - root routing instructions for future work.
 
 ---
-*Last updated: 2026-05-10 | Reason: initial knowledge base setup*
-
+*Last updated: 2026-05-10 | Reason: Phase 0 implementation refresh*

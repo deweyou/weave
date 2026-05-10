@@ -8,6 +8,8 @@ Weave is an early-stage local-first writing agent for personal knowledge. The cu
 |----------|-----------------|
 | [docs/project-structure.md](docs/project-structure.md) | How the repository is organized, where code should live, and how the app boots |
 | [docs/phase-0-runtime-boundaries.md](docs/phase-0-runtime-boundaries.md) | Which runtime owns UI, desktop bridge, agent service, and data responsibilities |
+| [docs/architecture/phase-0.md](docs/architecture/phase-0.md) | Implemented Phase 0 runtime architecture and startup flow |
+| [docs/decisions/0001-runtime-split.md](docs/decisions/0001-runtime-split.md) | Why Weave splits Vite+, Tauri/Rust, and Python/FastAPI responsibilities |
 | [docs/superpowers/specs/2026-05-10-weave-phase-0-design.md](docs/superpowers/specs/2026-05-10-weave-phase-0-design.md) | The approved Phase 0 product and architecture scope |
 | [docs/.state.md](docs/.state.md) | Current knowledge-base state and coverage |
 | [docs/.todo.md](docs/.todo.md) | Open learning items and unresolved product/architecture questions |
@@ -30,6 +32,5 @@ Weave is an early-stage local-first writing agent for personal knowledge. The cu
 ## Current Prerequisites
 
 - Vite+ (`vp`) is expected for Node/pnpm workspace commands.
-- Rust toolchain is required before Tauri work because `cargo` is needed.
+- Rust toolchain is required for Tauri work because `cargo` is needed.
 - Python 3.11+ is expected for the FastAPI agent service.
-
