@@ -1,0 +1,17 @@
+{
+  "name": "weave",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "install:all": "vp install",
+    "desktop-dev": "pnpm --filter @weave/desktop tauri dev",
+    "desktop-build": "pnpm --filter @weave/desktop tauri build",
+    "agent-dev": "cd services/agent && . .venv/bin/activate && uvicorn app.main:app --host 127.0.0.1 --port 8765 --reload",
+    "agent-test": "cd services/agent && . .venv/bin/activate && pytest",
+    "check": "pnpm --filter @weave/desktop typecheck && pnpm --filter @weave/desktop build",
+    "test": "pnpm run agent-test"
+  },
+  "devDependencies": {}
+}
