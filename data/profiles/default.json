@@ -1,0 +1,8 @@
+{
+  "id": "default",
+  "name": "Default",
+  "description": "Default writing profile",
+  "style_preferences": [],
+  "memory_namespace": "default",
+  "knowledge_sources": []
+}
