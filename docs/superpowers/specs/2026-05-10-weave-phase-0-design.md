@@ -256,6 +256,10 @@ Manual verification:
 Phase 0 implementation must update:
 
 - `README.md`: project overview, prerequisites, install commands, dev commands, verification steps.
+- `AGENTS.md`: root navigation for future coding agents, with links to the knowledge base.
+- `docs/project-structure.md`: repository layout, ownership boundaries, and startup path.
+- `docs/phase-0-runtime-boundaries.md`: UI/Rust/Python/data ownership and cross-runtime rules.
+- `docs/.state.md` and `docs/.todo.md`: knowledge-base state and open learning items.
 - `docs/architecture/phase-0.md`: runtime boundaries and data flow.
 - `docs/decisions/0001-runtime-split.md`: why Weave uses Vite+ + Tauri/Rust + Python/FastAPI.
 
@@ -270,5 +274,4 @@ Phase 0 is complete when:
 - Rust can call Python `/health` and `/writing/discover`.
 - The UI displays discover results returned through Rust.
 - Local data directories and default profile are initialized.
-- README and architecture docs match the implemented commands and structure.
-
+- README, AGENTS.md, knowledge docs, and architecture docs match the implemented commands and structure.
