@@ -57,6 +57,14 @@ sequenceDiagram
 
 ## Ownership Rules
 
+Desktop runtime ownership:
+
+- `apps/desktop/src/renderer/` owns React UI.
+- `apps/desktop/src/main/` owns Electron main-process behavior, native dialogs,
+  app-local config, and filesystem setup.
+- `apps/desktop/src/preload/` owns the safe renderer bridge.
+- `apps/desktop/src/shared/` owns shared TypeScript API contracts.
+
 - [apps/desktop/src/main/main.ts#L1](../apps/desktop/src/main/main.ts#L1) owns
   desktop process startup and window creation.
 - [apps/desktop/src/preload/preload.ts#L1](../apps/desktop/src/preload/preload.ts#L1)
@@ -66,6 +74,19 @@ sequenceDiagram
 - [apps/desktop/src/shared/desktop-api.ts#L1](../apps/desktop/src/shared/desktop-api.ts#L1)
   owns shared type contracts between preload and renderer.
 
+## Initialized Workspace Structure
+
+```text
+SelectedFolder/
+  .weave/
+    config.json
+    indexes/
+    logs/
+  notes/
+  memos/
+  todos/
+```
+
 ## Non-Goals For Now
 
 - No `packages/*` directory until extraction has a real consumer.
@@ -74,4 +95,4 @@ sequenceDiagram
   are useful.
 
 ---
-*Last updated: 2026-06-06 | Reason: reflect desktop-only repository structure after removing premature packages and mobile placeholder*
+*Last updated: 2026-06-06 | Reason: document Electron runtime ownership and initialized workspace structure*
