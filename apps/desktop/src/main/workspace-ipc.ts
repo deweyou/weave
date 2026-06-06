@@ -14,6 +14,14 @@ function unreadableWorkspaceConfigStatus(): WorkspaceStatus {
   };
 }
 
+async function getRecoverableWorkspaceStatus(appDataPath: string): Promise<WorkspaceStatus> {
+  try {
+    return await getWorkspaceStatus(appDataPath);
+  } catch {
+    return unreadableWorkspaceConfigStatus();
+  }
+}
+
 function workspaceInitializationFailedStatus(workspacePath: string): WorkspaceStatus {
   return {
     kind: "missing",
@@ -24,11 +32,7 @@ function workspaceInitializationFailedStatus(workspacePath: string): WorkspaceSt
 
 export function registerWorkspaceIpc(): void {
   ipcMain.handle(workspaceIpcChannels.getStatus, async () => {
-    try {
-      return await getWorkspaceStatus(app.getPath("userData"));
-    } catch {
-      return unreadableWorkspaceConfigStatus();
-    }
+    return getRecoverableWorkspaceStatus(app.getPath("userData"));
   });
 
   ipcMain.handle(workspaceIpcChannels.choose, async (event): Promise<ChooseWorkspaceResult> => {
@@ -48,7 +52,7 @@ export function registerWorkspaceIpc(): void {
     if (result.canceled || workspacePath === undefined) {
       return {
         canceled: true,
-        status: await getWorkspaceStatus(app.getPath("userData")),
+        status: await getRecoverableWorkspaceStatus(app.getPath("userData")),
       };
     }
 
