@@ -1,0 +1,81 @@
+:root {
+  color: #1e2528;
+  background: #f5f2ed;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 40px;
+  display: grid;
+  gap: 28px;
+  align-content: start;
+}
+
+.hero {
+  display: grid;
+  gap: 8px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 13px;
+  color: #66706d;
+}
+
+h1 {
+  margin: 0;
+  font-size: 42px;
+  letter-spacing: 0;
+}
+
+.entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.entry-card {
+  border: 1px solid #d8d2c7;
+  border-radius: 8px;
+  background: #fffdf9;
+  padding: 18px;
+  min-height: 150px;
+}
+
+.entry-card h2 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.entry-card p {
+  margin: 0;
+  line-height: 1.6;
+  color: #4b5552;
+}
+
+.entry-meta {
+  margin-bottom: 20px !important;
+  font-size: 12px;
+  color: #8b5e34 !important;
+}

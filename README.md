@@ -1,70 +1,20 @@
 # Weave
 
-Weave is a local-first writing agent for personal knowledge. Phase 0 builds the runnable project skeleton: Vite+ workspace, Tauri/React desktop UI, Rust bridge commands, Python FastAPI mock agent service, and development-local data directories.
+Weave is a local-first writing, memo, and todo app.
 
-## Prerequisites
+The current repository is initialized as a Vite+ pnpm workspace with an Electron
+desktop app. iOS support is planned in the same repository, but the directory
+should be created only when implementation starts.
 
-- Vite+ (`vp`)
-- Node managed by Vite+
-- pnpm managed by Vite+
-- Rust toolchain with `cargo`
-- Python 3.11+
-
-## Install
+## Commands
 
 ```bash
-make install
+vp install
+vp run desktop:dev
+vp run check
 ```
 
-## Run The Agent Service
+## Structure
 
-```bash
-make agent-dev
-```
-
-The service runs at `http://127.0.0.1:8765`.
-
-## Run The Desktop App
-
-In a second terminal:
-
-```bash
-make desktop-dev
-```
-
-## Test
-
-```bash
-make test
-```
-
-## Check
-
-```bash
-make check
-```
-
-## Phase 0 Scope
-
-Included:
-
-- Minimal desktop UI
-- React to Rust command calls
-- Rust to Python health/discover calls
-- Mock `/writing/discover` response
-- Development data directory initialization
-
-Not included:
-
-- Real model providers
-- Multi-turn chat
-- Memory retrieval
-- Writing workflows
-- LangChain or LangGraph
-
-## Repository Map
-
-- `apps/desktop/` - Tauri + React desktop app
-- `services/agent/` - Python FastAPI agent service
-- `data/` - development-local runtime data
-- `docs/` - architecture, decisions, knowledge base, specs, and plans
+- `apps/desktop` - Electron main process, preload bridge, and Vite React renderer.
+- `docs` - repository memory, architecture rules, and decisions.

@@ -1,35 +1,43 @@
 # Weave
 
-Weave is an early-stage local-first writing agent for personal knowledge. The current repository goal is Phase 0: prove a runnable desktop skeleton with Vite+ tooling, Tauri/React, Rust bridge commands, a Python FastAPI agent service, and local data directories.
+请跟我中文对话。
+
+Weave is a local-first writing, memo, and todo app. The repository is a single
+Vite+ pnpm workspace. The first runnable target is an Electron desktop app;
+future iOS work should stay in this repository, but no mobile directory should be
+created before implementation starts.
 
 ## Knowledge Base
 
-| Document | What it answers |
-|----------|-----------------|
-| [docs/project-structure.md](docs/project-structure.md) | How the repository is organized, where code should live, and how the app boots |
-| [docs/architecture.md](docs/architecture.md) | Current runtime architecture, startup flow, and architecture decisions |
-| [docs/runtime-boundaries.md](docs/runtime-boundaries.md) | Which runtime owns UI, desktop bridge, agent service, and data responsibilities |
-| [docs/superpowers/specs/2026-05-10-weave-phase-0-design.md](docs/superpowers/specs/2026-05-10-weave-phase-0-design.md) | The approved Phase 0 product and architecture scope |
-| [docs/.state.md](docs/.state.md) | Current knowledge-base state and coverage |
-| [docs/.todo.md](docs/.todo.md) | Open learning items and unresolved product/architecture questions |
+| Document | What it covers |
+|----------|----------------|
+| [docs/project-structure.md](docs/project-structure.md) | Current structure, startup path, and ownership map |
+| [docs/repository-rules.md](docs/repository-rules.md) | Rules for packages, mobile, and future extraction |
+| [DESIGN.md](DESIGN.md) | Durable UI design contract |
 
-## Hard Constraints
+## Current Architecture
 
-- Keep Phase 0 scoped to project initialization, Hello World UI, Rust bridge checks, Python mock endpoints, local data directory initialization, and docs.
-- Do not add real model providers, API key handling, memory retrieval, embeddings, multi-turn chat, writing workflow automation, or LangChain/LangGraph in Phase 0.
-- Use Vite+ for JavaScript workspace/tooling only; keep Tauri/Rust and Python/FastAPI as explicit runtime boundaries.
-- The React UI must call Python only through Rust/Tauri commands, never directly through a hardcoded localhost URL.
-- Treat `data/` as development-local runtime state. Do not commit generated profile/session/draft content beyond intentional starter fixtures.
+- `apps/desktop` owns Electron main/preload code and the React renderer.
+- Keep all application code in `apps/desktop` until a real second consumer exists.
+- Do not create `packages/*` preemptively. Extract a package only after repeated
+  code or a second app proves the boundary.
+
+## Commands
+
+- Install dependencies with `vp install`.
+- Run the desktop app with `vp run desktop:dev`.
+- Run baseline checks with `vp run check`.
+
+## Constraints
+
+- Keep this as one repository.
+- Do not over-design iOS before the stack is chosen.
+- Do not create `apps/mobile` until iOS work actually starts.
+- Do not create shared packages until extraction has a concrete consumer.
+- Prefer explicit domain names over generic utility modules.
 
 ## Task Routing
 
-- If changing repository layout, startup commands, or boot flow, read [docs/project-structure.md](docs/project-structure.md) and [docs/architecture.md](docs/architecture.md) first.
-- If touching React/Tauri/Rust/Python boundaries, read [docs/runtime-boundaries.md](docs/runtime-boundaries.md) first.
-- If changing Phase 0 scope, update [docs/superpowers/specs/2026-05-10-weave-phase-0-design.md](docs/superpowers/specs/2026-05-10-weave-phase-0-design.md) before implementation.
-- If completing meaningful architecture or product work, update the knowledge base under `docs/` and refresh [docs/.state.md](docs/.state.md).
-
-## Current Prerequisites
-
-- Vite+ (`vp`) is expected for Node/pnpm workspace commands.
-- Rust toolchain is required for Tauri work because `cargo` is needed.
-- Python 3.11+ is expected for the FastAPI agent service.
+- If changing repository layout, read [docs/project-structure.md](docs/project-structure.md) first.
+- If adding `packages/*`, `apps/mobile`, sync, or persistence boundaries, read [docs/repository-rules.md](docs/repository-rules.md) first.
+- If making UI, UX, or visual design changes, read [DESIGN.md](DESIGN.md) first.
