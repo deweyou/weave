@@ -1,10 +1,34 @@
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from "electron";
-import { workspaceIpcChannels, type ChooseWorkspaceResult } from "../shared/desktop-api.js";
+import {
+  workspaceIpcChannels,
+  type ChooseWorkspaceResult,
+  type WorkspaceStatus,
+} from "../shared/desktop-api.js";
 import { getWorkspaceStatus, setWorkspacePath } from "./workspace.js";
+
+function unreadableWorkspaceConfigStatus(): WorkspaceStatus {
+  return {
+    kind: "unconfigured",
+    path: null,
+    message: "Workspace configuration could not be read. Choose a local folder to continue.",
+  };
+}
+
+function workspaceInitializationFailedStatus(workspacePath: string): WorkspaceStatus {
+  return {
+    kind: "missing",
+    path: workspacePath,
+    message: "Weave could not initialize that folder. Choose a writable local folder.",
+  };
+}
 
 export function registerWorkspaceIpc(): void {
   ipcMain.handle(workspaceIpcChannels.getStatus, async () => {
-    return getWorkspaceStatus(app.getPath("userData"));
+    try {
+      return await getWorkspaceStatus(app.getPath("userData"));
+    } catch {
+      return unreadableWorkspaceConfigStatus();
+    }
   });
 
   ipcMain.handle(workspaceIpcChannels.choose, async (event): Promise<ChooseWorkspaceResult> => {
@@ -28,9 +52,17 @@ export function registerWorkspaceIpc(): void {
       };
     }
 
+    let status: WorkspaceStatus;
+
+    try {
+      status = await setWorkspacePath(app.getPath("userData"), workspacePath);
+    } catch {
+      status = workspaceInitializationFailedStatus(workspacePath);
+    }
+
     return {
       canceled: false,
-      status: await setWorkspacePath(app.getPath("userData"), workspacePath),
+      status,
     };
   });
 }
