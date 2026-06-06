@@ -1,19 +1,9 @@
-.DS_Store
 .worktrees/
 node_modules/
 dist/
-target/
+.vite/
+.turbo/
+coverage/
 *.log
 
-.env
-.venv/
-__pycache__/
-.pytest_cache/
-.ruff_cache/
-
-apps/desktop/src-tauri/target/
-services/agent/.venv/
-
-data/**/*.json
-!data/profiles/default.json
-!data/**/.gitkeep
+data/

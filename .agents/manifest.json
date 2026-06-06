@@ -1,0 +1,44 @@
+{
+  "mode": "copy",
+  "source": {
+    "root": "/Users/deweyou/.deweyou/agents/source",
+    "commit": "a9c2fc110c8a07a8ac1a6e6d64fef43124eaa288"
+  },
+  "cacheRoot": "/Users/deweyou/.deweyou/agents/assets",
+  "assets": {
+    "skills": [
+      "repo-memory",
+      "spec-driven-coding",
+      "ui-design",
+      "git-delivery"
+    ],
+    "rules": []
+  },
+  "assetSnapshot": {
+    "skills": {
+      "repo-memory": {
+        "description": "Repository memory workflow for durable project knowledge. Use before commits or PRs, after meaningful code or workflow changes, when initializing or updating AGENTS.md/docs/DESIGN.md/CLAUDE.md, or when local skills, design contracts, and repo conventions may need knowledge updates.\n",
+        "hash": "sha256:e9ef1f0cc12d30ffba31d41815eea1ae99430ba57e31d77c9c4cb571b1d7be9f"
+      },
+      "spec-driven-coding": {
+        "description": "Enforce the repository's spec-driven coding workflow for new features, behavior changes, and multi-step implementation work. Use this skill when starting a requirement, feature, refactor with behavior impact, or ambiguous coding task. It requires Superpowers brainstorming/spec/plan/task flow before coding, defaults plan execution to subagent-driven development unless blocked, and still requires TDD, verification, and spec updates when requirements change.\n",
+        "hash": "sha256:0dffd785052f1b985c6fca089a07b6c4a01ec1ffcabeecdbef14dd9c1c130cc5"
+      },
+      "ui-design": {
+        "description": "UX/UI design workflow for research, flow design, visual style, implementation, review, and AI design prompts. Use for web, mobile/H5, native apps, HarmonyOS, mini programs, macOS, dashboards, tools, component libraries, onboarding, settings, empty states, UX references, or explicit UI/UX/style requests.\n",
+        "hash": "sha256:48113ba29bf018556e06d70fd27b1419e99d9ec478fca533c755fd52bcb1f567"
+      },
+      "git-delivery": {
+        "description": "Branch-aware git delivery workflow. Use before editing new coding or asset tasks to check branch, dirty work, and base sync; use when the user asks to commit, submit, push, open a PR, ship work, resolve base conflicts, or follow PR CI, while protecting unrelated work.\n",
+        "hash": "sha256:321555c198d624493a17ace8798e007de1d3f6f178a5c4674d67e9065cdbb479"
+      }
+    },
+    "rules": {}
+  },
+  "scope": "project",
+  "tools": [
+    "codex"
+  ],
+  "ruleWiring": "reference",
+  "initializedAt": "2026-06-06T10:10:18.000Z"
+}
