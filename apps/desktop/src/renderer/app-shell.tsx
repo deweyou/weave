@@ -1,15 +1,68 @@
+import type { WorkspaceStatus } from "../shared/desktop-api";
 import type { WorkspaceSummary } from "./starter-workspace";
 
 export interface AppShellProps {
   readonly workspace: WorkspaceSummary;
   readonly runtimeName: string;
+  readonly status: WorkspaceStatus;
+  readonly isChoosingWorkspace: boolean;
+  readonly onChooseWorkspace: () => void;
 }
 
-export function AppShell({ workspace, runtimeName }: AppShellProps) {
+function WorkspaceSetup({
+  status,
+  isChoosingWorkspace,
+  onChooseWorkspace
+}: Pick<AppShellProps, "status" | "isChoosingWorkspace" | "onChooseWorkspace">) {
+  const isMissing = status.kind === "missing";
+
+  return (
+    <main className="setup-shell">
+      <section className="setup-panel" aria-labelledby="setup-title">
+        <p className="eyebrow">local-first setup</p>
+        <h1 id="setup-title">{isMissing ? "重新选择 Weave 文件夹" : "选择你的 Weave 文件夹"}</h1>
+        <p className="setup-copy">
+          Weave 会在这个文件夹里创建 <code>.weave/</code>, <code>notes/</code>,{" "}
+          <code>memos/</code>, 和 <code>todos/</code>。这个文件夹就是你的本地资料根目录。
+        </p>
+        {status.message ? <p className="setup-message">{status.message}</p> : null}
+        {status.path ? <p className="setup-path">当前路径：{status.path}</p> : null}
+        <button
+          className="primary-action"
+          type="button"
+          onClick={onChooseWorkspace}
+          disabled={isChoosingWorkspace}
+        >
+          {isChoosingWorkspace ? "正在打开..." : "选择文件夹"}
+        </button>
+      </section>
+    </main>
+  );
+}
+
+export function AppShell({
+  workspace,
+  runtimeName,
+  status,
+  isChoosingWorkspace,
+  onChooseWorkspace
+}: AppShellProps) {
+  if (status.kind !== "ready") {
+    return (
+      <WorkspaceSetup
+        status={status}
+        isChoosingWorkspace={isChoosingWorkspace}
+        onChooseWorkspace={onChooseWorkspace}
+      />
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="hero">
-        <p className="eyebrow">{runtimeName} / local-first workspace</p>
+        <p className="eyebrow">
+          {runtimeName} / {status.path}
+        </p>
         <h1>Weave</h1>
       </header>
 
