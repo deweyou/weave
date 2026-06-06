@@ -40,7 +40,7 @@ async function isAccessibleDirectory(targetPath: string): Promise<boolean> {
       return false;
     }
 
-    await access(targetPath, constants.R_OK | constants.W_OK);
+    await access(targetPath, constants.R_OK | constants.W_OK | constants.X_OK);
     return true;
   } catch {
     return false;

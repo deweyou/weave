@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -102,6 +102,24 @@ describe("workspace", () => {
       path: workspacePath,
       message: "The configured workspace folder is unavailable. Choose a valid local folder.",
     });
+  });
+
+  it("reports missing when the configured workspace directory cannot be traversed", async () => {
+    const appDataPath = await makeTempDir("weave-appdata-");
+    const workspacePath = await makeTempDir("weave-workspace-");
+
+    await setWorkspacePath(appDataPath, workspacePath);
+    await chmod(workspacePath, 0o600);
+
+    try {
+      await expect(getWorkspaceStatus(appDataPath)).resolves.toEqual({
+        kind: "missing",
+        path: workspacePath,
+        message: "The configured workspace folder is unavailable. Choose a valid local folder.",
+      });
+    } finally {
+      await chmod(workspacePath, 0o700);
+    }
   });
 
   it("reports missing when the configured workspace path is unavailable", async () => {
