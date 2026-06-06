@@ -1,1 +1,0 @@
-"""Weave local agent service."""
