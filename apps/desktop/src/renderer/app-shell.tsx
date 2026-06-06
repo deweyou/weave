@@ -81,6 +81,21 @@ export function AppShell({
           </article>
         ))}
       </section>
+
+      <section className="settings-strip" aria-label="Workspace settings">
+        <div>
+          <p className="entry-meta">WORKSPACE</p>
+          <p className="settings-path">{status.path}</p>
+        </div>
+        <button
+          className="secondary-action"
+          type="button"
+          onClick={onChooseWorkspace}
+          disabled={isChoosingWorkspace}
+        >
+          {isChoosingWorkspace ? "正在打开..." : "更改文件夹"}
+        </button>
+      </section>
     </main>
   );
 }
