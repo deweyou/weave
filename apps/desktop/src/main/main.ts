@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { registerWorkspaceIpc } from "./workspace-ipc.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
@@ -30,6 +31,7 @@ function createMainWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  registerWorkspaceIpc();
   createMainWindow();
 
   app.on("activate", () => {
