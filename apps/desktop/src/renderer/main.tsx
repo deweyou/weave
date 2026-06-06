@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { WorkspaceStatus } from "../shared/desktop-api";
 import { AppShell } from "./app-shell";
@@ -20,39 +20,68 @@ const fallbackStatus: WorkspaceStatus = {
   message: "Desktop workspace APIs are unavailable."
 };
 
+const workspaceStatusError: WorkspaceStatus = {
+  kind: "unconfigured",
+  path: null,
+  message: "Weave could not load workspace status. Choose a local folder to continue."
+};
+
+const folderPickerError: WorkspaceStatus = {
+  kind: "unconfigured",
+  path: null,
+  message: "Weave could not open the folder picker. Try again."
+};
+
 function RootApp() {
+  const isMountedRef = useRef(true);
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
   const [isChoosingWorkspace, setIsChoosingWorkspace] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
 
     async function loadStatus() {
-      const nextStatus = window.weave ? await window.weave.getWorkspaceStatus() : fallbackStatus;
-      if (isMounted) {
-        setStatus(nextStatus);
+      try {
+        const nextStatus = window.weave ? await window.weave.getWorkspaceStatus() : fallbackStatus;
+        if (isMountedRef.current) {
+          setStatus(nextStatus);
+        }
+      } catch {
+        if (isMountedRef.current) {
+          setStatus(workspaceStatusError);
+        }
       }
     }
 
     void loadStatus();
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
   }, []);
 
   async function chooseWorkspace() {
     if (!window.weave) {
-      setStatus(fallbackStatus);
+      if (isMountedRef.current) {
+        setStatus(fallbackStatus);
+      }
       return;
     }
 
     setIsChoosingWorkspace(true);
     try {
       const result = await window.weave.chooseWorkspace();
-      setStatus(result.status);
+      if (isMountedRef.current) {
+        setStatus(result.status);
+      }
+    } catch {
+      if (isMountedRef.current) {
+        setStatus(folderPickerError);
+      }
     } finally {
-      setIsChoosingWorkspace(false);
+      if (isMountedRef.current) {
+        setIsChoosingWorkspace(false);
+      }
     }
   }
 

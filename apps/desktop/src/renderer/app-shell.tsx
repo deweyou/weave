@@ -26,7 +26,11 @@ function WorkspaceSetup({
           <code>memos/</code>, 和 <code>todos/</code>。这个文件夹就是你的本地资料根目录。
         </p>
         {status.message ? <p className="setup-message">{status.message}</p> : null}
-        {status.path ? <p className="setup-path">当前路径：{status.path}</p> : null}
+        {status.path ? (
+          <p className="setup-path">
+            当前路径：<span className="workspace-path-inline">{status.path}</span>
+          </p>
+        ) : null}
         <button
           className="primary-action"
           type="button"
@@ -61,7 +65,7 @@ export function AppShell({
     <main className="app-shell">
       <header className="hero">
         <p className="eyebrow">
-          {runtimeName} / {status.path}
+          {runtimeName} / <span className="workspace-path-inline">{status.path}</span>
         </p>
         <h1>Weave</h1>
       </header>

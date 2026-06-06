@@ -114,6 +114,10 @@ h1 {
   line-height: 1.5;
 }
 
+.workspace-path-inline {
+  overflow-wrap: anywhere;
+}
+
 .primary-action {
   width: fit-content;
   border: 0;
