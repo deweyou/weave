@@ -10,14 +10,15 @@ flowchart TD
     Workspace --> Notes["notes/"]
     Workspace --> Memos["memos/"]
     Workspace --> Todos["todos/"]
-    Main -. future/current boundary .-> Agent["Python FastAPI agent"]
+    Main -. future agent boundary, not first-run path .-> Agent["Python FastAPI agent"]
 ```
 
 Weave is a local-first desktop app with a React UI running behind an Electron
 preload bridge. Electron main owns desktop-local responsibilities: native
 dialogs, app-local workspace config, filesystem setup, and the boundary where a
-Python FastAPI agent may be called when agent behavior is needed. Workspace setup
-is an Electron/filesystem flow and does not require the Python service.
+Python FastAPI agent can be introduced for future agent behavior. First-run
+workspace setup is an Electron/filesystem flow and does not call or require the
+Python service.
 
 ## Runtime Shape
 
@@ -31,8 +32,8 @@ is an Electron/filesystem flow and does not require the Python service.
   [apps/desktop/src/main/](../apps/desktop/src/main/main.ts#L1).
 - Shared TypeScript contracts live in
   [apps/desktop/src/shared/desktop-api.ts](../apps/desktop/src/shared/desktop-api.ts#L1).
-- Python FastAPI agent behavior remains outside first-run workspace setup and
-  should stay behind the desktop boundary when reintroduced or called.
+- Python FastAPI agent behavior is a future agent boundary and is not in the
+  first-run workspace setup path.
 
 ## Workspace Flow
 
@@ -78,8 +79,8 @@ and open that workspace directly when it is available.
 - The renderer reaches native capabilities only through the preload bridge.
 - Electron main owns filesystem setup and native dialogs.
 - Workspace initialization is local and does not require Python service startup.
-- Python remains the boundary for future model, memory, and agent workflow
-  behavior when that behavior is present.
+- Python remains the future boundary for model, memory, and agent workflow
+  behavior; it is not required for first-run workspace setup.
 - Shared schemas stay local to `apps/desktop/src/shared/` until repeated
   cross-runtime duplication proves a broader boundary.
 
@@ -91,4 +92,4 @@ and open that workspace directly when it is available.
   initialization, and later launch behavior.
 
 ---
-*Last updated: 2026-06-06 | Reason: refresh runtime architecture for Electron single-workspace first run*
+*Last updated: 2026-06-06 | Reason: clarify Electron first-run path and future agent boundary*
