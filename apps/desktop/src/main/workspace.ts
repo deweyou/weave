@@ -32,9 +32,15 @@ function workspaceMetadataPath(workspacePath: string): string {
   return path.join(workspacePath, ".weave", workspaceConfigFileName);
 }
 
-async function pathExists(targetPath: string): Promise<boolean> {
+async function isAccessibleDirectory(targetPath: string): Promise<boolean> {
   try {
-    await access(targetPath, constants.F_OK);
+    const target = await stat(targetPath);
+
+    if (!target.isDirectory()) {
+      return false;
+    }
+
+    await access(targetPath, constants.R_OK | constants.W_OK);
     return true;
   } catch {
     return false;
@@ -42,15 +48,26 @@ async function pathExists(targetPath: string): Promise<boolean> {
 }
 
 async function readAppWorkspaceConfig(appDataPath: string): Promise<AppWorkspaceConfig | null> {
+  let rawConfig: string;
+
   try {
-    const rawConfig = await readFile(appConfigPath(appDataPath), "utf8");
-    const parsed = JSON.parse(rawConfig) as Partial<AppWorkspaceConfig>;
-    return typeof parsed.workspacePath === "string" && parsed.workspacePath.length > 0
-      ? { workspacePath: parsed.workspacePath }
-      : null;
-  } catch {
-    return null;
+    rawConfig = await readFile(appConfigPath(appDataPath), "utf8");
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
   }
+
+  const parsed = JSON.parse(rawConfig) as Partial<AppWorkspaceConfig>;
+  return typeof parsed.workspacePath === "string" && parsed.workspacePath.length > 0
+    ? { workspacePath: parsed.workspacePath }
+    : null;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 export async function initializeWorkspace(workspacePath: string): Promise<void> {
@@ -95,7 +112,7 @@ export async function getWorkspaceStatus(appDataPath: string): Promise<Workspace
     };
   }
 
-  if (!(await pathExists(config.workspacePath))) {
+  if (!(await isAccessibleDirectory(config.workspacePath))) {
     return {
       kind: "missing",
       path: config.workspacePath,
