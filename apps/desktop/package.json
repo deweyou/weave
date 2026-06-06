@@ -8,7 +8,7 @@
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"tsc -p tsconfig.main.json --watch\" \"wait-on http://127.0.0.1:5173 dist/main/main.js && electron .\"",
     "build": "vite build && tsc -p tsconfig.main.json",
     "typecheck": "tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.main.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests --exclude=dist/**"
   },
   "dependencies": {
     "react": "^19.2.7",

@@ -6,7 +6,7 @@ import {
 } from "../shared/desktop-api.js";
 import { getWorkspaceStatus, setWorkspacePath } from "./workspace.js";
 
-function unreadableWorkspaceConfigStatus(): WorkspaceStatus {
+export function internalWorkspaceConfigReadErrorStatus(): WorkspaceStatus {
   return {
     kind: "unconfigured",
     path: null,
@@ -18,11 +18,11 @@ async function getRecoverableWorkspaceStatus(appDataPath: string): Promise<Works
   try {
     return await getWorkspaceStatus(appDataPath);
   } catch {
-    return unreadableWorkspaceConfigStatus();
+    return internalWorkspaceConfigReadErrorStatus();
   }
 }
 
-function workspaceInitializationFailedStatus(workspacePath: string): WorkspaceStatus {
+export function internalWorkspaceInitializationErrorStatus(workspacePath: string): WorkspaceStatus {
   return {
     kind: "missing",
     path: workspacePath,
@@ -61,7 +61,7 @@ export function registerWorkspaceIpc(): void {
     try {
       status = await setWorkspacePath(app.getPath("userData"), workspacePath);
     } catch {
-      status = workspaceInitializationFailedStatus(workspacePath);
+      status = internalWorkspaceInitializationErrorStatus(workspacePath);
     }
 
     return {

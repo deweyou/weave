@@ -9,5 +9,6 @@
     "outDir": "dist",
     "sourceMap": true
   },
-  "include": ["src/main", "src/preload", "src/shared"]
+  "include": ["src/main", "src/preload", "src/shared"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
 }
