@@ -16,6 +16,8 @@ function createMainWindow(): BrowserWindow {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      // The preload bundle is ESM, so it must run outside Electron's sandboxed preload context.
+      sandbox: false,
       preload: path.join(currentDir, "../preload/preload.js")
     }
   });
