@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="weave">
+  <defs><mask id="m"><rect width="100" height="100" fill="#fff"></rect>
+    <path d="M44 30 63 80 84 22" fill="none" stroke="#000" stroke-width="21" stroke-linecap="round" stroke-linejoin="round"></path>
+  </mask></defs>
+  <path d="M16 22 37 80 56 30" fill="none" stroke="#15564a" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path>
+  <path d="M13 50 87 50" fill="none" stroke="#5fb792" stroke-width="8.88" stroke-linecap="round" mask="url(#m)"></path>
+  <path d="M44 30 63 80 84 22" fill="none" stroke="#3a9b76" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>

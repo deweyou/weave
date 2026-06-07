@@ -1,0 +1,111 @@
+# Current Architecture
+
+```mermaid
+flowchart TD
+    VP["Vite+ tooling"] --> FirstRun["first-run React app"]
+    VP --> MainUI["main React app"]
+    FirstRun -->|window.weave| Preload["Electron preload bridge"]
+    MainUI -->|window.weave| Preload
+    Preload --> Main["Electron main"]
+    Main --> FirstRunWindow["first-run BrowserWindow"]
+    Main --> MainWindow["main BrowserWindow"]
+    Main -->|filesystem| Workspace["Selected workspace folder"]
+    Workspace --> DotWeave[".weave/"]
+    Workspace --> Notes["notes/"]
+    Workspace --> Memos["memos/"]
+    Workspace --> Todos["todos/"]
+    Main -. future agent boundary, not first-run path .-> Agent["Python FastAPI agent"]
+```
+
+Weave is a local-first desktop app with separate React apps for first-run setup
+and the main workspace, both running behind the same Electron preload bridge.
+Electron main owns desktop-local responsibilities: native dialogs, app-local
+workspace config, filesystem setup, and the boundary where a Python FastAPI agent
+can be introduced for future agent behavior. First-run workspace setup is an
+Electron/filesystem flow and does not call or require the Python service.
+
+## Runtime Shape
+
+- Vite+ manages JavaScript workspace tooling and commands.
+- First-run setup renders from
+  [apps/desktop/first-run.html](../apps/desktop/first-run.html#L1) and
+  [apps/desktop/src/renderer/first-run-app.tsx](../apps/desktop/src/renderer/first-run-app.tsx#L1).
+- The main workspace renders from
+  [apps/desktop/main.html](../apps/desktop/main.html#L1) and
+  [apps/desktop/src/renderer/main-app.tsx](../apps/desktop/src/renderer/main-app.tsx#L1).
+- The renderer calls the safe `window.weave` API exposed by
+  [apps/desktop/src/preload/preload.ts](../apps/desktop/src/preload/preload.ts#L1).
+- Electron main owns window startup, IPC handlers, native folder selection, and
+  filesystem setup under
+  [apps/desktop/src/main/](../apps/desktop/src/main/main.ts#L1).
+- Shared TypeScript contracts live in
+  [apps/desktop/src/shared/desktop-api.ts](../apps/desktop/src/shared/desktop-api.ts#L1).
+- Python FastAPI agent behavior is a future agent boundary and is not in the
+  first-run workspace setup path.
+
+## Workspace Flow
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant VP as Vite+ / pnpm
+    participant Setup as first-run app
+    participant MainUI as main app
+    participant Preload as Preload bridge
+    participant Main as Electron main
+    participant FS as Local filesystem
+
+    Dev->>VP: vp run desktop:dev
+    VP->>Setup: serve first-run.html
+    VP->>MainUI: serve main.html
+    VP->>Main: compile and launch Electron
+    Main->>Main: choose first-run or main window
+    Main->>Preload: attach safe bridge to selected window
+    Setup->>Preload: window.weave.getWorkspaceStatus()
+    Preload->>Main: workspace:getStatus
+    Setup->>Preload: window.weave.selectWorkspaceFolder()
+    Preload->>Main: workspace:select
+    Setup->>Preload: window.weave.initializeWorkspace()
+    Preload->>Main: workspace:initialize
+    Main->>FS: create .weave/, notes/, memos/, todos/
+    Main->>MainUI: open main BrowserWindow
+```
+
+The user chooses one local workspace folder on first run. Weave initializes this
+single workspace structure:
+
+```text
+SelectedFolder/
+  .weave/
+    config.json
+    indexes/
+    logs/
+  notes/
+  memos/
+  todos/
+```
+
+Later launches read the configured workspace path from Electron app-local config
+and open that workspace directly when it is available.
+
+## Architecture Decisions Kept Current
+
+- The renderer reaches native capabilities only through the preload bridge.
+- Each Electron window maps to its own React app entry. Do not reintroduce a
+  single root renderer that branches between first-run and main app behavior.
+- Electron main owns filesystem setup and native dialogs.
+- Workspace initialization is local and does not require Python service startup.
+- Python remains the future boundary for model, memory, and agent workflow
+  behavior; it is not required for first-run workspace setup.
+- Shared schemas stay local to `apps/desktop/src/shared/` until repeated
+  cross-runtime duplication proves a broader boundary.
+
+## Verification
+
+- `pnpm --filter @weave/desktop typecheck` verifies desktop TypeScript.
+- `pnpm --filter @weave/desktop test` verifies desktop unit behavior.
+- Manual Electron verification checks first-run folder choice, workspace
+  initialization, and later launch behavior.
+
+---
+*Last updated: 2026-06-07 | Reason: record split renderer apps for first-run and main windows*

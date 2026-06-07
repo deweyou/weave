@@ -1,0 +1,55 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --ui-font-sans:
+    "Source Han Sans SC Web", "PingFang SC", "Heiti SC", "Microsoft YaHei", "Noto Sans CJK SC",
+    sans-serif;
+  --ui-font-serif: "Source Han Serif CN Web", "Songti SC", "STSong", "SimSun", "NSimSun", serif;
+  --ui-font-body: var(--ui-font-sans);
+  --ui-font-control: var(--ui-font-sans);
+  --ui-font-content: var(--ui-font-serif);
+  --ui-font-display: var(--ui-font-serif);
+  --ui-font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+  --ui-font-weight-body: 400;
+  --ui-font-weight-emphasis: 500;
+  --ui-font-weight-title: 600;
+  --ui-font-weight-strong: 700;
+}
+
+body {
+  margin: 0;
+  font-family: var(--ui-font-body);
+  font-weight: var(--ui-font-weight-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  font-family: var(--ui-font-control);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--ui-font-display);
+  font-weight: var(--ui-font-weight-title);
+}
+
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--ui-font-mono);
+}
