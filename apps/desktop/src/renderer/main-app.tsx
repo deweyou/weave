@@ -7,7 +7,7 @@ import { renderRoot } from "./render-root";
 import { createStarterWorkspace } from "./starter-workspace";
 import { applyTheme, readStoredTheme, syncSystemIconTheme } from "./theme";
 import { WorkspaceHomeView } from "./workspace-home-view";
-import "@deweyou-design/styles/theme-with-fonts.css";
+import "./design-theme.css";
 import "./styles.css";
 
 const browserPreviewStatus: WorkspaceStatus = {

@@ -7,7 +7,7 @@ import { messages } from "./messages";
 import { renderRoot } from "./render-root";
 import type { AppTheme } from "./theme";
 import { applyTheme, readStoredTheme, storeTheme, syncSystemIconTheme } from "./theme";
-import "@deweyou-design/styles/theme-with-fonts.css";
+import "./design-theme.css";
 import "./styles.css";
 
 const browserPreviewNotice = "当前浏览器预览不能打开系统文件夹选择器，请在桌面应用窗口中完成设置。";

@@ -11,8 +11,8 @@ tokens:
     border: "#d7dbd8"
     primary: "#8b5e34"
   typography:
-    control: "@deweyou-design/styles --ui-font-control"
-    content: "@deweyou-design/styles --ui-font-content"
+    control: "deweyou font stack --ui-font-control"
+    content: "deweyou font stack --ui-font-content"
   spacing:
     rhythm: "8px"
 ---
@@ -54,9 +54,9 @@ Weave's interface standard is **simple, operable, clean**.
 
 ## Typography
 
-Use the two font families provided by `@deweyou-design/styles`: content and
-display surfaces should use `--ui-font-content`, while buttons, inputs, and
-controls should use `--ui-font-control`. Avoid viewport-scaled typography.
+Use Weave's local deweyou font stack variables: content and display surfaces
+should use `--ui-font-content`, while buttons, inputs, and controls should use
+`--ui-font-control`. Avoid viewport-scaled typography.
 
 Use compact desktop type. Large type is reserved for true app-level entry points;
 panels, settings, lists, and tool surfaces should use tighter headings.
@@ -131,4 +131,4 @@ layout stable.
 - Do not design iOS-specific behavior before the stack is selected.
 
 ---
-*Last updated: 2026-06-07 | Reason: add theme-aware Weave brand asset behavior*
+*Last updated: 2026-06-07 | Reason: keep CI self-contained while preserving Weave font variables*
