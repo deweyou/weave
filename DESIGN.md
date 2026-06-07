@@ -76,6 +76,8 @@ Use theme-aware Weave assets where the app controls rendering: light surfaces us
 the paper icon/mark, dark surfaces use the ink icon/mark, and system theme follows
 the current macOS appearance. Keep the packaged static app icon on the general
 paper version unless the packaging chain explicitly supports appearance variants.
+Keep desktop app icons visually inset inside the square canvas so Dock, Mission
+Control, and Stage Manager thumbnails match native macOS icon weight.
 
 ## Layout
 
@@ -85,6 +87,10 @@ items, but page sections should not become nested card stacks.
 Desktop screens should feel precise: aligned edges, predictable gutters, stable
 control sizes, and no layout shift when state changes. Empty and first-run states
 should look like setup or workspace states, not marketing pages.
+
+The main desktop workspace uses a persistent left sidebar and a routed right main
+area. macOS window controls should be embedded into the page chrome with enough
+top inset that the traffic lights do not collide with sidebar content.
 
 ## Components
 
@@ -131,4 +137,4 @@ layout stable.
 - Do not design iOS-specific behavior before the stack is selected.
 
 ---
-*Last updated: 2026-06-07 | Reason: keep CI self-contained while preserving Weave font variables*
+*Last updated: 2026-06-08 | Reason: record desktop sidebar shell, inset window controls, and icon weight*

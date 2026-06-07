@@ -87,7 +87,7 @@ function MainApp() {
 
   if (!status) {
     return (
-      <main className="app-shell">
+      <main className="status-shell">
         <header className="workspace-header">
           <p className="eyebrow">{labels.loading.eyebrow}</p>
           <h1>{labels.loading.title}</h1>
@@ -98,7 +98,7 @@ function MainApp() {
 
   if (status.kind !== "ready") {
     return (
-      <main className="app-shell">
+      <main className="status-shell">
         <header className="workspace-header">
           <p className="eyebrow">Weave</p>
           <h1>{status.message ?? labels.firstRun.missingTitle}</h1>
