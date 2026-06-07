@@ -108,7 +108,7 @@ export async function getWorkspaceStatus(appDataPath: string): Promise<Workspace
     return {
       kind: "unconfigured",
       path: null,
-      message: "Choose a local folder to start using Weave.",
+      message: null,
     };
   }
 

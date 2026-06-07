@@ -2,9 +2,13 @@
 
 ```mermaid
 flowchart TD
-    VP["Vite+ tooling"] --> UI["React renderer"]
-    UI -->|window.weave| Preload["Electron preload bridge"]
+    VP["Vite+ tooling"] --> FirstRun["first-run React app"]
+    VP --> MainUI["main React app"]
+    FirstRun -->|window.weave| Preload["Electron preload bridge"]
+    MainUI -->|window.weave| Preload
     Preload --> Main["Electron main"]
+    Main --> FirstRunWindow["first-run BrowserWindow"]
+    Main --> MainWindow["main BrowserWindow"]
     Main -->|filesystem| Workspace["Selected workspace folder"]
     Workspace --> DotWeave[".weave/"]
     Workspace --> Notes["notes/"]
@@ -13,18 +17,22 @@ flowchart TD
     Main -. future agent boundary, not first-run path .-> Agent["Python FastAPI agent"]
 ```
 
-Weave is a local-first desktop app with a React UI running behind an Electron
-preload bridge. Electron main owns desktop-local responsibilities: native
-dialogs, app-local workspace config, filesystem setup, and the boundary where a
-Python FastAPI agent can be introduced for future agent behavior. First-run
-workspace setup is an Electron/filesystem flow and does not call or require the
-Python service.
+Weave is a local-first desktop app with separate React apps for first-run setup
+and the main workspace, both running behind the same Electron preload bridge.
+Electron main owns desktop-local responsibilities: native dialogs, app-local
+workspace config, filesystem setup, and the boundary where a Python FastAPI agent
+can be introduced for future agent behavior. First-run workspace setup is an
+Electron/filesystem flow and does not call or require the Python service.
 
 ## Runtime Shape
 
 - Vite+ manages JavaScript workspace tooling and commands.
-- React renders the desktop UI from
-  [apps/desktop/src/renderer/main.tsx](../apps/desktop/src/renderer/main.tsx#L1).
+- First-run setup renders from
+  [apps/desktop/first-run.html](../apps/desktop/first-run.html#L1) and
+  [apps/desktop/src/renderer/first-run-app.tsx](../apps/desktop/src/renderer/first-run-app.tsx#L1).
+- The main workspace renders from
+  [apps/desktop/main.html](../apps/desktop/main.html#L1) and
+  [apps/desktop/src/renderer/main-app.tsx](../apps/desktop/src/renderer/main-app.tsx#L1).
 - The renderer calls the safe `window.weave` API exposed by
   [apps/desktop/src/preload/preload.ts](../apps/desktop/src/preload/preload.ts#L1).
 - Electron main owns window startup, IPC handlers, native folder selection, and
@@ -41,20 +49,26 @@ Python service.
 sequenceDiagram
     participant Dev as Developer
     participant VP as Vite+ / pnpm
-    participant UI as React renderer
+    participant Setup as first-run app
+    participant MainUI as main app
     participant Preload as Preload bridge
     participant Main as Electron main
     participant FS as Local filesystem
 
     Dev->>VP: vp run desktop:dev
-    VP->>UI: start Vite renderer
+    VP->>Setup: serve first-run.html
+    VP->>MainUI: serve main.html
     VP->>Main: compile and launch Electron
-    Main->>Preload: attach safe bridge
-    UI->>Preload: window.weave.getWorkspaceStatus()
+    Main->>Main: choose first-run or main window
+    Main->>Preload: attach safe bridge to selected window
+    Setup->>Preload: window.weave.getWorkspaceStatus()
     Preload->>Main: workspace:getStatus
-    UI->>Preload: window.weave.chooseWorkspace()
-    Preload->>Main: workspace:choose
+    Setup->>Preload: window.weave.selectWorkspaceFolder()
+    Preload->>Main: workspace:select
+    Setup->>Preload: window.weave.initializeWorkspace()
+    Preload->>Main: workspace:initialize
     Main->>FS: create .weave/, notes/, memos/, todos/
+    Main->>MainUI: open main BrowserWindow
 ```
 
 The user chooses one local workspace folder on first run. Weave initializes this
@@ -77,6 +91,8 @@ and open that workspace directly when it is available.
 ## Architecture Decisions Kept Current
 
 - The renderer reaches native capabilities only through the preload bridge.
+- Each Electron window maps to its own React app entry. Do not reintroduce a
+  single root renderer that branches between first-run and main app behavior.
 - Electron main owns filesystem setup and native dialogs.
 - Workspace initialization is local and does not require Python service startup.
 - Python remains the future boundary for model, memory, and agent workflow
@@ -92,4 +108,4 @@ and open that workspace directly when it is available.
   initialization, and later launch behavior.
 
 ---
-*Last updated: 2026-06-06 | Reason: clarify Electron first-run path and future agent boundary*
+*Last updated: 2026-06-07 | Reason: record split renderer apps for first-run and main windows*

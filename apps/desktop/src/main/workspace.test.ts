@@ -62,7 +62,7 @@ describe("workspace", () => {
     await expect(getWorkspaceStatus(appDataPath)).resolves.toEqual({
       kind: "unconfigured",
       path: null,
-      message: "Choose a local folder to start using Weave.",
+      message: null,
     });
   });
 
