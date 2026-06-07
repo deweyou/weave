@@ -26,4 +26,30 @@ describe("WorkspaceHomeView", () => {
     expect(html).toContain("工作区");
     expect(html).toContain("更改文件夹");
   });
+
+  it("renders the application sidebar navigation", () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceHomeView
+        workspace={createStarterWorkspace()}
+        runtimeName="electron"
+        status={{
+          kind: "ready",
+          path: "/Users/deweyou/Weave",
+          message: null,
+        }}
+        labels={messages["zh-CN"].shell}
+        isChoosingWorkspace={false}
+        onChooseWorkspace={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('aria-label="Weave navigation"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("首页");
+    expect(html).toContain("待办");
+    expect(html).toContain("备忘录");
+    expect(html).toContain("文档");
+    expect(html).toContain("AI Chat");
+    expect(html).toContain("设置");
+  });
 });

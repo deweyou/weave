@@ -26,6 +26,12 @@ export const messages = {
       workspaceReady: "本地资料根目录已就绪。这里会逐步成为写作、备忘录和待办的工作台。",
       workspaceLabel: "WORKSPACE",
       workspaceTitle: "工作区",
+      home: "首页",
+      todos: "待办",
+      memos: "备忘录",
+      documents: "文档",
+      chat: "AI Chat",
+      settings: "设置",
       changeFolder: "更改文件夹",
       choosingFolder: "正在打开..."
     }
@@ -55,6 +61,12 @@ export const messages = {
       workspaceReady: "Your local data root is ready. This will become the workspace for writing, memos, and todos.",
       workspaceLabel: "WORKSPACE",
       workspaceTitle: "Workspace",
+      home: "Home",
+      todos: "Todos",
+      memos: "Memos",
+      documents: "Documents",
+      chat: "AI Chat",
+      settings: "Settings",
       changeFolder: "Change folder",
       choosingFolder: "Opening..."
     }

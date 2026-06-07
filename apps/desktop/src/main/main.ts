@@ -93,7 +93,8 @@ function createMainWindow(): BrowserWindow {
     resizable: true,
     maximizable: true,
     fullscreenable: true,
-    frame: true,
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
     icon: path.join(currentDir, "../../build/weave-icon.png"),
     title: "Weave",
     webPreferences: {
