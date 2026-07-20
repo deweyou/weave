@@ -28,6 +28,18 @@ created before implementation starts.
 - Run the desktop app with `vp run desktop:dev`.
 - Run baseline checks with `vp run check`.
 
+## Development Workflow
+
+- Use DDev as the default workflow for non-trivial development tasks.
+- Keep only the `ddev` entry skill in the repository. DDev loads product,
+  UI, coding, delivery, and repository-memory modules from the global Dewey
+  asset cache when they are needed.
+- Use `$DDev <task>` for implementation, `$DDev inspect <question>` for
+  investigation, `$DDev brainstorm <topic>` for exploration, and `$DDev ship`
+  only when delivery is explicitly requested.
+- Keep DDev session state under `~/.deweyou/dev/`; do not commit repository-local
+  `.deweyou/dev/` state.
+
 ## Constraints
 
 - Keep this as one repository.
