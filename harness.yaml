@@ -1,0 +1,13 @@
+version: 3
+strategy: branch
+context:
+  repository:
+    source:
+      entry: AGENTS.md
+nodes:
+  repository-update:
+    kind: agent
+    description: 更新仓库结构、项目约定和产品设计文档。
+  repository-review:
+    kind: agent
+    description: 核查仓库清理范围、文档一致性、链接与验收证据。

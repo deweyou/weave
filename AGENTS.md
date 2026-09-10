@@ -1,55 +1,32 @@
 # Weave
 
-请跟我中文对话。
+请用中文与用户沟通。
 
-Weave is a local-first writing, memo, and todo app. The repository is a single
-Vite+ pnpm workspace. The first runnable target is an Electron desktop app;
-future iOS work should stay in this repository, but no mobile directory should be
-created before implementation starts.
+Weave 是面向 macOS、iPadOS、iOS 的原生个人工作空间，连接记录、写作与待办。第一期为本地基础富文本编辑器；CloudKit、待办和画板尚未实现。
 
-## Knowledge Base
+## 工作约定
 
-| Document | What it covers |
-|----------|----------------|
-| [docs/project-structure.md](docs/project-structure.md) | Current structure, startup path, and ownership map |
-| [docs/repository-rules.md](docs/repository-rules.md) | Rules for packages, mobile, and future extraction |
-| [DESIGN.md](DESIGN.md) | Durable UI design contract |
+- 使用 Swift 和 Apple 原生 UI 技术，保持单仓库。按实际代码边界组织工程，不预建空应用或共享包。
+- 区分已确认决策、提案和待验证技术，不把计划写成现状。
+- 用户显式调用 Deweyou Harness 时，按其技能管理 Run、计划、证据和验收；配置在 `harness.yaml`。不自动启用未被调用的工作流。
+- Harness 运行状态存放在用户级目录，不提交到仓库。
+- 共享领域模型和编辑命令，分别适配平台窗口、导航与输入。
+- 本地保存与云端同步分离；未上传内容不得作为缓存清理；同步不替代备份。
+- 验证覆盖中文输入法、撤销、离线保存、冲突与恢复。没有真实多设备证据，不宣称同步通过。
+- 提交、推送、发布与测试状态分别报告。
 
-## Current Architecture
+## 阅读入口
 
-- `apps/desktop` owns Electron main/preload code and the React renderer.
-- Keep all application code in `apps/desktop` until a real second consumer exists.
-- Do not create `packages/*` preemptively. Extract a package only after repeated
-  code or a second app proves the boundary.
+- 产品边界：[docs/product.md](docs/product.md)
+- 架构与未决项：[docs/architecture.md](docs/architecture.md)
+- 设计原则：[DESIGN.md](DESIGN.md)
+- 第一版流程提案：[docs/specs/first-release.md](docs/specs/first-release.md)
 
-## Commands
+## 当前工程与验证
 
-- Install dependencies with `vp install`.
-- Run the desktop app with `vp run desktop:dev`.
-- Run baseline checks with `vp run check`.
-
-## Development Workflow
-
-- Use DDev as the default workflow for non-trivial development tasks.
-- Keep only the `ddev` entry skill in the repository. DDev loads product,
-  UI, coding, delivery, and repository-memory modules from the global Dewey
-  asset cache when they are needed.
-- Use `$DDev <task>` for implementation, `$DDev inspect <question>` for
-  investigation, `$DDev brainstorm <topic>` for exploration, and `$DDev ship`
-  only when delivery is explicitly requested.
-- Keep DDev session state under `~/.deweyou/dev/`; do not commit repository-local
-  `.deweyou/dev/` state.
-
-## Constraints
-
-- Keep this as one repository.
-- Do not over-design iOS before the stack is chosen.
-- Do not create `apps/mobile` until iOS work actually starts.
-- Do not create shared packages until extraction has a concrete consumer.
-- Prefer explicit domain names over generic utility modules.
-
-## Task Routing
-
-- If changing repository layout, read [docs/project-structure.md](docs/project-structure.md) first.
-- If adding `packages/*`, `apps/mobile`, sync, or persistence boundaries, read [docs/repository-rules.md](docs/repository-rules.md) first.
-- If making UI, UX, or visual design changes, read [DESIGN.md](DESIGN.md) first.
+- `Sources/Weave`：SwiftUI 界面和本地记录存储；`Tests/WeaveTests`：存储行为测试。
+- `Weave.xcodeproj`：共享 macOS / iOS App target，最低系统版本均为 26。
+- `swift test`：本地存储测试；`open Weave.xcodeproj`：用 Xcode 选择平台运行。
+- `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build`：本机未签名构建。
+- `git diff --check` 与 Harness `config_inspect`：差异和配置验证。
+- 真机运行需配置开发团队。不得把模拟器编译通过报告为真机、输入法或同步验收通过。

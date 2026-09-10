@@ -1,111 +1,31 @@
-# Current Architecture
+# 当前架构
 
-```mermaid
-flowchart TD
-    VP["Vite+ tooling"] --> FirstRun["first-run React app"]
-    VP --> MainUI["main React app"]
-    FirstRun -->|window.weave| Preload["Electron preload bridge"]
-    MainUI -->|window.weave| Preload
-    Preload --> Main["Electron main"]
-    Main --> FirstRunWindow["first-run BrowserWindow"]
-    Main --> MainWindow["main BrowserWindow"]
-    Main -->|filesystem| Workspace["Selected workspace folder"]
-    Workspace --> DotWeave[".weave/"]
-    Workspace --> Notes["notes/"]
-    Workspace --> Memos["memos/"]
-    Workspace --> Todos["todos/"]
-    Main -. future agent boundary, not first-run path .-> Agent["Python FastAPI agent"]
-```
+第一期使用 SwiftUI 原生控件，macOS / iOS 26 为基线。`Weave.xcodeproj` 共享同一套 Swift 源码；`Package.swift` 用于本地存储测试。
 
-Weave is a local-first desktop app with separate React apps for first-run setup
-and the main workspace, both running behind the same Electron preload bridge.
-Electron main owns desktop-local responsibilities: native dialogs, app-local
-workspace config, filesystem setup, and the boundary where a Python FastAPI agent
-can be introduced for future agent behavior. First-run workspace setup is an
-Electron/filesystem flow and does not call or require the Python service.
+## 实现边界
 
-## Runtime Shape
+- `Sources/Weave/WeaveApp.swift`：应用生命周期、共享存储实例和 Mac 新建命令。
+- `Sources/Weave/WorkspaceView.swift`：NavigationSplitView、List、搜索、富文本原生编辑区 和错误状态。系统导航与工具栏负责 Liquid Glass 外观。
+- `Sources/Weave/NoteStore.swift`：记录身份、首行标题、选择状态、本地 JSON 读取和原子写入。
+- `Tests/WeaveTests/NoteStoreTests.swift`：重启恢复、文件损坏保护、保存失败保留与重试。
 
-- Vite+ manages JavaScript workspace tooling and commands.
-- First-run setup renders from
-  [apps/desktop/first-run.html](../apps/desktop/first-run.html#L1) and
-  [apps/desktop/src/renderer/first-run-app.tsx](../apps/desktop/src/renderer/first-run-app.tsx#L1).
-- The main workspace renders from
-  [apps/desktop/main.html](../apps/desktop/main.html#L1) and
-  [apps/desktop/src/renderer/main-app.tsx](../apps/desktop/src/renderer/main-app.tsx#L1).
-- The renderer calls the safe `window.weave` API exposed by
-  [apps/desktop/src/preload/preload.ts](../apps/desktop/src/preload/preload.ts#L1).
-- Electron main owns window startup, IPC handlers, native folder selection, and
-  filesystem setup under
-  [apps/desktop/src/main/](../apps/desktop/src/main/main.ts#L1).
-- Shared TypeScript contracts live in
-  [apps/desktop/src/shared/desktop-api.ts](../apps/desktop/src/shared/desktop-api.ts#L1).
-- Python FastAPI agent behavior is a future agent boundary and is not in the
-  first-run workspace setup path.
+`Note.richText` 是 AttributedString 主数据，使用 SwiftUI 属性范围显式编解码；`text` 是派生的纯文本投影。旧数据缺少 richText 时迁移为无格式文本；已有富文本损坏、为空值或与投影不一致时禁止写回。自定义格式命令通过 UndoManager 注册可逆修改。
+`MarkdownFormatting.swift` 负责有限语法转换：按行识别块标记、使用 Foundation 解析行内语法并映射为 SwiftUI 字体/链接。不是 Markdown 往返编解码器，`MarkdownShortcut.swift` 提供局部输入转换规则，`NativeRichTextEditor.swift` 使用 NSTextView / UITextView 接入规则，跳过输入法组合态并注册撤销。
 
-## Workspace Flow
+记录在创建时生成稳定 UUID。编辑直接更新当前记录，使用第一条非空行作为标题。列表保持创建顺序，输入时不跳动重排。
+存储由应用实例拥有，UI 通过 Observation 更新；每次修改同步原子保存。读取失败后禁止写回覆盖源文件；保存失败后保留内存状态。
 
-```mermaid
-sequenceDiagram
-    participant Dev as Developer
-    participant VP as Vite+ / pnpm
-    participant Setup as first-run app
-    participant MainUI as main app
-    participant Preload as Preload bridge
-    participant Main as Electron main
-    participant FS as Local filesystem
+## 后续边界
 
-    Dev->>VP: vp run desktop:dev
-    VP->>Setup: serve first-run.html
-    VP->>MainUI: serve main.html
-    VP->>Main: compile and launch Electron
-    Main->>Main: choose first-run or main window
-    Main->>Preload: attach safe bridge to selected window
-    Setup->>Preload: window.weave.getWorkspaceStatus()
-    Preload->>Main: workspace:getStatus
-    Setup->>Preload: window.weave.selectWorkspaceFolder()
-    Preload->>Main: workspace:select
-    Setup->>Preload: window.weave.initializeWorkspace()
-    Preload->>Main: workspace:initialize
-    Main->>FS: create .weave/, notes/, memos/, todos/
-    Main->>MainUI: open main BrowserWindow
-```
+CloudKit 已确认为后续方向，但没有容器、账号或同步代码。当前 JSON 不承诺跨设备合并，不能放入云盘来代替同步。
+大规模内容需要评估写入调度、数据库和迁移；当前同步写入不是长期性能方案。
+UITextView/NSTextView 深度扩展和 TextKit 2 自定义未实现。
+画板与导图后续使用独立可编辑内容对象，正文显示引用预览。附件下载、缓存与冲突处理需要另行实现。
 
-The user chooses one local workspace folder on first run. Weave initializes this
-single workspace structure:
+验证方法与命令见 [README](../README.md)。编译与存储测试不替代真实输入法、辅助功能、移动设备交互或 CloudKit 验证。
 
-```text
-SelectedFolder/
-  .weave/
-    config.json
-    indexes/
-    logs/
-  notes/
-  memos/
-  todos/
-```
+_Last updated: 2026-09-10 — 记录第一期实际源代码与存储边界。_
 
-Later launches read the configured workspace path from Electron app-local config
-and open that workspace directly when it is available.
+Markdown 快捷输入：行首 `#` 至 `######`、`-` / `*` / `+`、`>` 加空格；行内 `**加粗**`、`*斜体*`、反引号代码闭合后自动转换。支持有序列表和待办快捷输入，以及三个反引号加回车进入代码块。标题回车恢复正文，列表回车续写、空行退出；macOS 列表支持 Tab / Shift-Tab 缩进。代码块空行回车退出。选中文字粘贴 URL 添加链接，Cmd-K 打开链接编辑。待办标记可点击切换并撤销。多字符 Markdown 粘贴仍需手动转换。
 
-## Architecture Decisions Kept Current
-
-- The renderer reaches native capabilities only through the preload bridge.
-- Each Electron window maps to its own React app entry. Do not reintroduce a
-  single root renderer that branches between first-run and main app behavior.
-- Electron main owns filesystem setup and native dialogs.
-- Workspace initialization is local and does not require Python service startup.
-- Python remains the future boundary for model, memory, and agent workflow
-  behavior; it is not required for first-run workspace setup.
-- Shared schemas stay local to `apps/desktop/src/shared/` until repeated
-  cross-runtime duplication proves a broader boundary.
-
-## Verification
-
-- `pnpm --filter @weave/desktop typecheck` verifies desktop TypeScript.
-- `pnpm --filter @weave/desktop test` verifies desktop unit behavior.
-- Manual Electron verification checks first-run folder choice, workspace
-  initialization, and later launch behavior.
-
----
-*Last updated: 2026-06-07 | Reason: record split renderer apps for first-run and main windows*
+代码样式通过 `CodeStyleAttribute` 区分行内代码和带标识的代码块，包含代码内部换行；`NoteAttributeScope` 同时保存原 SwiftUI 属性与代码角色。`CodeLayoutManager` 在原生文字背景阶段绘制表面，保留原生选区和插入点。旧版等宽代码及其高亮在展示桥接时兼容，正文字符不变。
