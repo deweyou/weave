@@ -1,11 +1,17 @@
 {
   "version": 1,
   "skills": {
-    "ddev": {
-      "source": "deweyou/agents",
+    "apple-design": {
+      "source": "emilkowalski/skills",
       "sourceType": "github",
-      "skillPath": "skills/ddev/SKILL.md",
-      "computedHash": "a6e8ee599b657da6c8a587e6e5c9fa0fa6036eea961c703a0c0b79eae21a9093"
+      "skillPath": "skills/apple-design/SKILL.md",
+      "computedHash": "8b94db67cb9edaad5f1501010804caa610131f1d2dfda0a27664b2e858deade3"
+    },
+    "high-end-visual-design": {
+      "source": "Leonxlnx/taste-skill",
+      "sourceType": "github",
+      "skillPath": "skills/soft-skill/SKILL.md",
+      "computedHash": "7db385e4c5370e5a7fca9704a1361b056e4504ea6a03924bb86f33a4f00b5c73"
     }
   }
 }

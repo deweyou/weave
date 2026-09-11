@@ -1,9 +1,8 @@
-.worktrees/
-node_modules/
-dist/
-.vite/
-.turbo/
-coverage/
-*.log
-
-data/
+.DS_Store
+.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.deweyou/
+__pycache__/
+*.pyc

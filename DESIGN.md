@@ -1,140 +1,54 @@
----
-name: weave-design
-description: Simple, operable, clean interface rules for Weave's local-first desktop app.
-version: 1
-tokens:
-  color:
-    canvas: "#f6f7f6"
-    surface: "#ffffff"
-    text: "#1e2528"
-    muted: "#66706d"
-    border: "#d7dbd8"
-    primary: "#8b5e34"
-  typography:
-    control: "deweyou font stack --ui-font-control"
-    content: "deweyou font stack --ui-font-content"
-  spacing:
-    rhythm: "8px"
----
+# Weave 设计原则
 
-# Weave Design
+产品目标是安静、直接、可持续写作的个人工作空间。第一期实现本地富文本编辑；后续画板与同步见[产品边界](docs/product.md)。
 
-Weave should feel like a quiet local workspace for writing, memos, and todos:
-simple, operable, clean, focused, readable, and restrained.
+## 原生优先与审美 skill
 
-## Design Thesis
+用户确认的方向是 Swift 原生、Apple 控件与 Liquid Glass。设计优先级为：内容可读与数据安全 → 稳定输入和无障碍 → 平台惯例 → 视觉精修。
 
-Prioritize fast capture, clear resurfacing, and calm review. The interface should
-make the next useful action obvious without making the product feel empty,
-decorative, or over-explained.
+- `apple-design` 用于即时反馈、连续可打断的交互、空间关系、节制的材质与动态效果。其 CSS / Web API 示例需要转译为平台行为，不能成为引入 Web 技术的理由。
+- `high-end-visual-design` 用于审核层级、间距、对齐、材质与细节一致性。它面向营销网站的随机布局、字体禁用、双层卡片、超大标题和滚动入场动画不适用于正文编辑器。
+- 使用系统字体、SF Symbols、语义颜色和原生菜单 / sheet。稳定一致的界面比每次换一种“高级”风格更重要。
+- 正文、插入点、选区和输入法候选不能为了视觉效果延迟出现或被动画打断。
 
-## Design Paradigm
+## 内容与控制层
 
-Weave's interface standard is **simple, operable, clean**.
+导航、工具栏和按钮使用系统材质；正文清晰、稳定，不叠自制玻璃背景或装饰噪点。通过文字层级和适量留白组织信息，不把每段文字包装成卡片。
 
-- **Simple** means every screen has one obvious purpose, a short information
-  hierarchy, and no decorative explanation that does not help the current task.
-- **Operable** means primary actions are visible, named with direct verbs, easy
-  to hit with pointer or keyboard, and supported by clear loading, disabled,
-  error, and recovery states.
-- **Clean** means visual structure comes from alignment, spacing, typography,
-  dividers, and restrained surfaces rather than gradients, nested cards,
-  oversized hero sections, or ornamental illustration.
+沿用 Apple 的[材质指南](https://developer.apple.com/design/human-interface-guidelines/materials)和[Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/liquid-glass)作为设计参考；涉及具体新 API 时检查当前 SDK 与官方文档。
 
-## Principles
+Mac 保持键盘、菜单、焦点与窗口操作习惯；iPad 根据可用空间适配分栏、触控和硬件键盘；iPhone 优先单列和清楚的返回路径。浅深色、增加对比度、减少透明度、减少动态效果和 VoiceOver 都需要实际验证，使用语义 API 不等于验证完成。
 
-- Keep the first screen usable as the product, not a landing page.
-- Prefer dense but breathable workspace layouts over decorative sections.
-- Make local-first status and workspace context visible without making them the
-  primary content.
-- Every view should make the current mode and the next action understandable
-  within a few seconds.
-- Use fewer words first. Add explanatory copy only when it reduces uncertainty
-  about local files, data ownership, recovery, or irreversible actions.
+## 文档样式与输入准则
 
-## Typography
+| 内容 | 设计要求 |
+| --- | --- |
+| 正文与空行 | 清楚易读；空行按字体自然高度排版，不设小于字体的行高上限来制造留白 |
+| 标题 | 作用于完整段落；层级可辨；回车恢复正文，不污染后续输入 |
+| 行内格式 | 只改变选中 / 标记内容；闭合后正常续写，避免格式意外延续 |
+| 列表 | 标记和换行悬挂对齐；续写、退出、缩进与退格行为可预测 |
+| 引用 | 连续竖线和适度缩进；装饰不干扰选区、复制与点击 |
+| 行内代码 | 等宽、贴合文字的浅底色；与同一行正文基线协调 |
+| 代码块 | 多行共用连续背景和内边距；边界、空行退出与撤销明确 |
+| 勾选项 | 标记可点击，有完成反馈；不擅自排序，不与拖动选字冲突 |
+| 链接 | 可辨认、可编辑、可移除；选中文字粘贴 URL 保留原标签 |
 
-Use Weave's local deweyou font stack variables: content and display surfaces
-should use `--ui-font-content`, while buttons, inputs, and controls should use
-`--ui-font-control`. Avoid viewport-scaled typography.
+跨中文、英文、emoji 和段落边界测试选区。中文组合输入期间不强制重排替换或移动光标。撤销既恢复内容，也恢复继续输入所需的属性；切换记录与重启不能改变格式。
 
-Use compact desktop type. Large type is reserved for true app-level entry points;
-panels, settings, lists, and tool surfaces should use tighter headings.
+## 当前排版基线
 
-## Color
+以下是当前实现参数，调整时核对 `NativeTextAttributes.layoutParagraphs` 和平台容器，不能只改文档：
 
-Use neutral light canvas and clean white surfaces. Keep accent color for
-metadata and active state, not broad background fills.
+- 阅读宽度约 728 pt，滚动容器铺满编辑区域，滚动条贴右。Mac 最小左右边距 32 pt，移动端 24 pt。
+- 显示字体倍率 Mac 1.3、移动端 1.08；写回还原倍率。Dynamic Type 的完整适配仍需真机核查。
+- 正文额外行距 6 pt、段后 8 pt；空白段落不额外加行距 / 段距，也不压缩自然行高。
+- 代码块水平内边距 14 pt、行间距 3 pt；相邻行共用块标识和连续表面。
+- H1 / H2 有独立字号；H3–H6 当前共享 headline 视觉字号，不能宣称六级视觉层次已完成。
 
-Prefer neutral contrast and small accent moments. Avoid single-hue themes,
-generic gradients, purple-blue dominance, or color used as decoration without
-state meaning.
+## 审核与验收
 
-## Brand Assets
+先定位具体场景，再比较 Apple Notes / Bear 的原生写作与键盘体验，或 Craft / Notion 的段落组织。竞品行为需当前证据，不能凭印象宣称一致；只吸收适合本期的交互。
 
-Use theme-aware Weave assets where the app controls rendering: light surfaces use
-the paper icon/mark, dark surfaces use the ink icon/mark, and system theme follows
-the current macOS appearance. Keep the packaged static app icon on the general
-paper version unless the packaging chain explicitly supports appearance variants.
-Keep desktop app icons visually inset inside the square canvas so Dock, Mission
-Control, and Stage Manager thumbnails match native macOS icon weight.
+每条问题记录：场景、实际结果、预期、影响、修复建议。优先修复丢字、错选区、撤销或存储问题，其次输入阻碍，再处理样式精修。至少观察实际 App 的输入、选区和滚动状态；静态截图只证明视觉，不能证明输入行为。
 
-## Layout
-
-Use stable grids and explicit responsive constraints. Cards may represent actual
-items, but page sections should not become nested card stacks.
-
-Desktop screens should feel precise: aligned edges, predictable gutters, stable
-control sizes, and no layout shift when state changes. Empty and first-run states
-should look like setup or workspace states, not marketing pages.
-
-The main desktop workspace uses a persistent left sidebar and a routed right main
-area. macOS window controls should be embedded into the page chrome with enough
-top inset that the traffic lights do not collide with sidebar content.
-
-## Components
-
-Keep reusable UI local to `apps/desktop` until reuse is proven. Extract component
-packages only when a second consumer exists.
-
-Prefer native-feeling controls and direct labels. Buttons are for clear commands;
-settings and status areas should be compact, scannable, and visually quieter than
-the primary workflow.
-
-## Interaction
-
-Favor direct actions and predictable navigation. Desktop behavior should not
-assume mobile patterns until the mobile app exists.
-
-Primary actions should be singular where possible. Secondary actions should stay
-available but visually quieter. Recovery paths should be near the problem they
-resolve, especially for missing local folders or unavailable filesystem access.
-
-## Accessibility
-
-Maintain semantic landmarks, labels for grouped content, and readable contrast.
-
-Preserve visible focus states, keyboard reachability, readable line lengths, and
-wrapping for long local paths. Disabled controls must look disabled and keep
-layout stable.
-
-## Do
-
-- Keep controls compact and obvious.
-- Use durable class names that express product meaning.
-- Preserve keyboard and screen-reader friendly structure.
-- Prefer concise Chinese UI copy for app surfaces, with English only where it is
-  a file name, technical path, command, or established product term.
-- Show local-first context through paths, folder structure, and recovery states
-  instead of abstract trust claims.
-
-## Don't
-
-- Do not add decorative gradients, orbs, or card-heavy marketing layouts.
-- Do not use onboarding carousels, large hero compositions, or feature-tour pages
-  for required setup flows.
-- Do not create shared UI abstractions before repeated use.
-- Do not design iOS-specific behavior before the stack is selected.
-
----
-*Last updated: 2026-06-08 | Reason: record desktop sidebar shell, inset window controls, and icon weight*
+完整操作矩阵见[验证清单](docs/verification.md)。后续画板进入独立编辑区并恢复正文位置，属于设计方向，当前没有实现。

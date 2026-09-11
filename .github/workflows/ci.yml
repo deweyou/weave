@@ -1,39 +1,102 @@
 name: CI
-
 on:
   pull_request:
   push:
-    branches:
-      - main
-
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
 
 jobs:
-  desktop:
-    name: Desktop
-    runs-on: ubuntu-latest
-
+  unit-tests:
+    name: Unit tests and coverage
+    runs-on: macos-26
+    timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+      - name: Validate coverage gate
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Unit tests with coverage
+        run: |
+          set -o pipefail
+          mkdir -p .build/reports
+          swift test --enable-code-coverage 2>&1 | tee .build/reports/unit-tests.log
+      - name: Enforce line coverage
+        run: |
+          report=$(swift test --show-codecov-path)
+          python3 scripts/check_coverage.py "$report" --output .build/reports/coverage.md
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          if [ -f .build/reports/coverage.md ]; then
+            cat .build/reports/coverage.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          version: 10.25.0
+          name: unit-test-reports
+          path: |
+            .build/reports/
+            .build/**/codecov/*.json
+          if-no-files-found: warn
+          retention-days: 14
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+  ui-tests:
+    name: UI tests (${{ matrix.platform }})
+    runs-on: macos-26
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macOS, iOS]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version
+      - name: Select destination
+        env:
+          TEST_PLATFORM: ${{ matrix.platform }}
+        run: |
+          if [ "$TEST_PLATFORM" = macOS ]; then
+            echo 'TEST_DESTINATION=platform=macOS' >> "$GITHUB_ENV"
+          else
+            device=$(python3 scripts/select_simulator.py)
+            xcrun simctl boot "$device"
+            xcrun simctl bootstatus "$device" -b
+            echo "TEST_DESTINATION=platform=iOS Simulator,id=$device" >> "$GITHUB_ENV"
+          fi
+      - name: Run UI tests
+        run: |
+          set -o pipefail
+          mkdir -p .build/reports
+          xcodebuild -project Weave.xcodeproj -scheme Weave \
+            -destination "$TEST_DESTINATION" -derivedDataPath .build/ui \
+            -parallel-testing-enabled NO -resultBundlePath .build/reports/ui.xcresult \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test 2>&1 | tee .build/reports/ui-tests.log
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          node-version: 22
-          cache: pnpm
+          name: ui-test-reports-${{ matrix.platform }}
+          path: .build/reports/
+          if-no-files-found: warn
+          retention-days: 14
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run checks
-        run: pnpm run check
-
-      - name: Build desktop app
-        run: pnpm --filter @weave/desktop build
+  ci-required:
+    name: CI required
+    if: always()
+    needs: [unit-tests, ui-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all checks to pass
+        env:
+          UNIT_RESULT: ${{ needs.unit-tests.result }}
+          UI_RESULT: ${{ needs.ui-tests.result }}
+        run: test "$UNIT_RESULT" = success && test "$UI_RESULT" = success
