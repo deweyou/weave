@@ -70,6 +70,7 @@ struct WorkspaceView: View {
                 } actions: {
                     Button("新建记录", systemImage: "plus") { store.createNote() }
                         .buttonStyle(.glassProminent)
+                        .accessibilityIdentifier("empty-new-note")
                 }
             }
         }

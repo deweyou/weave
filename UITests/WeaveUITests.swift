@@ -24,7 +24,13 @@ final class WeaveUITests: XCTestCase {
     private var editor: XCUIElement { app.textViews["note-editor"] }
 
     private func newNote() {
+        #if os(macOS)
+        // On small desktops the toolbar action moves into its overflow menu.
+        // A fresh store exposes the primary action in the empty detail view.
+        let button = app.buttons["empty-new-note"]
+        #else
         let button = app.buttons["new-note"]
+        #endif
         XCTAssertTrue(button.waitForExistence(timeout: 10))
         button.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
