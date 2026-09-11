@@ -2,7 +2,22 @@ import SwiftUI
 
 @main
 struct WeaveApp: App {
-    @State private var store = NoteStore()
+    @State private var store: NoteStore
+
+    init() {
+        #if DEBUG
+        // A UUID names an isolated test store; never accept an arbitrary data path.
+        if let value = ProcessInfo.processInfo.environment["WEAVE_UI_TEST_SESSION"],
+           let session = UUID(uuidString: value) {
+            let directory = URL.applicationSupportDirectory
+                .appendingPathComponent("WeaveUITests", isDirectory: true)
+                .appendingPathComponent(session.uuidString, isDirectory: true)
+            _store = State(initialValue: NoteStore(directory: directory))
+            return
+        }
+        #endif
+        _store = State(initialValue: NoteStore())
+    }
 
     var body: some Scene {
         WindowGroup {

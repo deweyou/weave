@@ -21,7 +21,7 @@ Context 对整个 Run 激活；Skills 在节点分派时激活。配置与资源
 
 | 任务 | 常见节点顺序 |
 | --- | --- |
-| 编辑器小修复 | editor-implement → swift-tests、受影响平台 build → interaction-review → repository-review |
+| 编辑器小修复 | editor-implement → swift-tests → coverage-check、受影响平台 build / UI tests → interaction-review → repository-review |
 | 文档视觉优化 | design-review → editor-implement → 受影响测试 / build → interaction-review → repository-review |
 | 新能力或重大取舍 | scope-design → design-review（有 UI 时）→ editor-implement → 自动与交互验证 → repository-review |
 | 知识 / 配置维护 | repository-update → config-review（配置变更时）、repository-review |
@@ -47,3 +47,5 @@ Context 对整个 Run 激活；Skills 在节点分派时激活。配置与资源
 使用 GitHub plugin 核对仓库、权限和已有 PR，Git 推送已授权分支，plugin 创建 / 更新 PR。保留已确认的分支和目标，不因为 CLI 未登录要求重复授权。若自动审批拒绝，提供新的可信证据或明确询问用户，不能换工具绕过。
 
 当前配置不包含合并、发布或持续监控节点，这些不是提交 / PR 的隐含动作。
+
+CI 定义在 `.github/workflows/ci.yml`。带覆盖率的单测必须先完成，才能执行 coverage-check；UI 节点可独立运行。任务中新增 CI 不代表 GitHub 已运行或分支保护已启用，交付时分别记录本地测试、远端工作流和合并门禁状态。

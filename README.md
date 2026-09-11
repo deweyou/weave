@@ -49,3 +49,7 @@ Markdown 快捷输入：行首 `#` 至 `######`、`-` / `*` / `+`、`>` 加空�
 ## 项目协作
 
 从[知识索引](docs/index.md)进入项目；验证方法见[验证清单](docs/verification.md)，Harness 能力目录与任务计划方式见[开发流程](docs/development.md)。配置维护不自动创建 Run；运行任务时显式调用 `/harness-work`。
+
+## CI 与自动化
+
+PR 自动运行单测、分层行覆盖率门禁、Mac 与 iPhone 模拟器 XCUITest；产物含测试日志、覆盖率报告及 UI `.xcresult`。本地命令和门槛见[验证清单](docs/verification.md#持续集成)。`CI required` 可作为分支保护必需检查；保护规则需在 GitHub 单独配置。

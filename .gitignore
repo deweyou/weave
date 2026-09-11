@@ -4,3 +4,5 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 .deweyou/
+__pycache__/
+*.pyc

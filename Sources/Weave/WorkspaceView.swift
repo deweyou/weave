@@ -41,6 +41,7 @@ struct WorkspaceView: View {
                         store.createNote()
                     }
                     .disabled(store.loadError != nil)
+                    .accessibilityIdentifier("new-note")
                     .help("新建记录")
                 }
             }

@@ -556,6 +556,7 @@ extension NativeRichTextEditor: NSViewRepresentable {
         view.isAutomaticDashSubstitutionEnabled = false
         view.textContainerInset = NSSize(width: 32, height: 36)
         view.setAccessibilityLabel("记录正文")
+        view.setAccessibilityIdentifier("note-editor")
         view.textStorage?.setAttributedString(NativeTextAttributes.native(text, context: fontContext))
         view.delegate = context.coordinator
         context.coordinator.textView = view
@@ -627,6 +628,7 @@ extension NativeRichTextEditor: UIViewRepresentable {
         view.smartQuotesType = .no
         view.smartDashesType = .no
         view.accessibilityLabel = "记录正文"
+        view.accessibilityIdentifier = "note-editor"
         view.attributedText = NativeTextAttributes.native(text, context: fontContext)
         view.delegate = context.coordinator
         context.coordinator.textView = view

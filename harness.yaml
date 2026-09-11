@@ -59,7 +59,19 @@ nodes:
   swift-tests:
     kind: command
     description: Swift 行为或数据修改时运行测试；覆盖范围以测试代码为准，不替代 UI 验收。
-    command: swift test
+    command: swift test --enable-code-coverage
+  coverage-check:
+    kind: command
+    description: 在当前工作区完成带覆盖率的单测后执行；核心逻辑、原生桥接与全源码分别设门槛，缺失报告直接失败。
+    command: python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
+  macos-ui-tests:
+    kind: command
+    description: 执行 macOS 原生 UI 自动化；使用 Debug 专用隔离数据，覆盖编辑、重启恢复、快捷语法和撤销。
+    command: xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/ui-macos -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+  ios-ui-tests:
+    kind: command
+    description: 在本机可用 iPhone 模拟器上执行新建、编辑、重启恢复和 Markdown 冒烟测试。
+    command: xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-ios -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
   macos-build:
     kind: command
     description: Mac 或共享源码变化时验证 macOS target 编译。

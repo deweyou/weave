@@ -2,7 +2,7 @@
 
 ## 工程与输入
 
-现状：SwiftUI 组织界面，macOS / iOS 26 为基线；Swift Package 使用 Swift 6.2。共享 App target 位于 `Weave.xcodeproj`，Package 用于本地测试。
+现状：SwiftUI 组织界面，macOS / iOS 26 为基线；Swift Package 使用 Swift 6.2。共享 App target 位于 `Weave.xcodeproj`，Package 用于带覆盖率的单测；`UITests/WeaveUITests.swift` 通过 Xcode UI test target 在 Mac 和 iPhone 模拟器运行。
 
 | 文件 | 职责 |
 | --- | --- |
@@ -35,3 +35,7 @@
 - 多平台编译不能证明触控、输入法、辅助功能或多设备同步通过。
 
 现状依据上述源码；验证方法见[验证清单](verification.md)。
+
+## 测试基础设施
+
+`scripts/check_coverage.py` 读取 LLVM 覆盖率，按核心、桥接、全源码执行门禁；`.github/workflows/ci.yml` 运行单测和两端 UI 测试。Debug App 支持 UUID 命名的隔离测试存储，Release 使用正常存储。具体命令、门槛与限制见[验证清单](verification.md)。

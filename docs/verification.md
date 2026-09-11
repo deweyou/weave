@@ -34,3 +34,34 @@
 没有操作证据的项目写“待验证”；模拟器编译不等于模拟器运行，更不等于真机通过。单元测试对 marked text 的布尔保护不等于真实中文输入法通过。截图不等于撤销、保存或选择行为通过。
 
 当前没有 CloudKit。将来同步验收必须覆盖离线修改、不同设备冲突、账号与配额问题、恢复与重试，并记录真实多设备证据。同步不替代备份。
+
+## 持续集成
+
+`.github/workflows/ci.yml` 在每次 PR、main 推送及手动触发时运行，采用 GitHub `macos-26` 镜像和 Xcode 26.2。工具链变更需重新核对覆盖率和 UI 基线；镜像清单见 [GitHub runner-images](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)。
+
+- `Unit tests and coverage`：运行 Swift 测试与 Python 覆盖率门禁自身测试，保留日志、LLVM JSON 和 Markdown 汇总。
+- `UI tests (macOS)` / `UI tests (iOS)`：运行 `WeaveUITests`，保存 `.xcresult`（包含截图）和日志。iOS 自动选择可用的 iOS 26 及以上 iPhone 模拟器，不绑死设备 UUID。
+- `CI required`：汇总检查；上游失败、取消或跳过都不能通过。仓库分支保护需要将此检查设为必需；仅添加 YAML 不会自动修改 GitHub 分支保护。
+
+本地单测和门禁：
+
+```sh
+swift test --enable-code-coverage
+python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
+python3 -m unittest discover -s scripts -p 'test_*.py'
+```
+
+行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。核心包含除了 App 入口、SwiftUI 界面和原生桥接以外的全部 Swift 文件，新增文件默认纳入；所有文件都计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+
+当前覆盖率来自单测，不混入 UI 执行数据；不提供分支覆盖率或新增行覆盖率门禁。UI 测试通过是独立检查，也不等于截图像素回归通过。
+
+本地 UI 测试：
+
+```sh
+xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/ui-macos -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-ios -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+```
+
+添加 `-resultBundlePath` 可保存到尚不存在的 `.xcresult` 路径。Mac UI 测试需要可用桌面与测试自动化权限，会操作测试 App。CI 使用临时宿主；本地不在操作其他 App 时混跑 UI 测试。
+
+每个 UI 测试通过 Debug 专用 `WEAVE_UI_TEST_SESSION` UUID 使用独立的 Application Support/WeaveUITests 子目录；重启同一测试继续读取相同数据，不使用或清理真实 Weave/notes.json。Release 不读取该变量。测试以稳定 accessibilityIdentifier 查找控件，截图和文本断言只证明所覆盖场景；真实中文候选、富文本视觉和触控仍按上面的矩阵验证。
