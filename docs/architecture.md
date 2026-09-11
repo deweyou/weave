@@ -1,31 +1,37 @@
 # 当前架构
 
-第一期使用 SwiftUI 原生控件，macOS / iOS 26 为基线。`Weave.xcodeproj` 共享同一套 Swift 源码；`Package.swift` 用于本地存储测试。
+## 工程与输入
 
-## 实现边界
+现状：SwiftUI 组织界面，macOS / iOS 26 为基线；Swift Package 使用 Swift 6.2。共享 App target 位于 `Weave.xcodeproj`，Package 用于本地测试。
 
-- `Sources/Weave/WeaveApp.swift`：应用生命周期、共享存储实例和 Mac 新建命令。
-- `Sources/Weave/WorkspaceView.swift`：NavigationSplitView、List、搜索、富文本原生编辑区 和错误状态。系统导航与工具栏负责 Liquid Glass 外观。
-- `Sources/Weave/NoteStore.swift`：记录身份、首行标题、选择状态、本地 JSON 读取和原子写入。
-- `Tests/WeaveTests/NoteStoreTests.swift`：重启恢复、文件损坏保护、保存失败保留与重试。
+| 文件 | 职责 |
+| --- | --- |
+| `Sources/Weave/WeaveApp.swift` | 生命周期、存储实例、Mac 新建命令 |
+| `Sources/Weave/WorkspaceView.swift` | 分栏、列表与搜索、格式菜单、链接表单、错误状态 |
+| `Sources/Weave/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、字体映射、选区与输入属性、快捷输入接入、原生背景绘制 |
+| `Sources/Weave/ParagraphEditing.swift` | 整段格式操作、段落角色、待办标记切换 |
+| `Sources/Weave/MarkdownShortcut.swift` | 单次输入触发的局部转换规则，UTF-16 范围 |
+| `Sources/Weave/MarkdownFormatting.swift` | 选区 / 全文 Markdown 转换，非无损编解码器 |
+| `Sources/Weave/NoteStore.swift` | 身份、标题、搜索投影、JSON 读写和失败恢复 |
 
-`Note.richText` 是 AttributedString 主数据，使用 SwiftUI 属性范围显式编解码；`text` 是派生的纯文本投影。旧数据缺少 richText 时迁移为无格式文本；已有富文本损坏、为空值或与投影不一致时禁止写回。自定义格式命令通过 UndoManager 注册可逆修改。
-`MarkdownFormatting.swift` 负责有限语法转换：按行识别块标记、使用 Foundation 解析行内语法并映射为 SwiftUI 字体/链接。不是 Markdown 往返编解码器，`MarkdownShortcut.swift` 提供局部输入转换规则，`NativeRichTextEditor.swift` 使用 NSTextView / UITextView 接入规则，跳过输入法组合态并注册撤销。
+当前自定义 `CodeLayoutManager: NSLayoutManager` 绘制行内代码、代码块背景和引用竖线，走 TextKit 1 布局路径；不能称作 TextKit 2 编辑器。macOS 以滚动容器内边距限制正文宽度，滚动条留在编辑区右边。
 
-记录在创建时生成稳定 UUID。编辑直接更新当前记录，使用第一条非空行作为标题。列表保持创建顺序，输入时不跳动重排。
-存储由应用实例拥有，UI 通过 Observation 更新；每次修改同步原子保存。读取失败后禁止写回覆盖源文件；保存失败后保留内存状态。
+输入事件经过平台 delegate、`Coordinator.intercept` 与局部转换规则，再发布富文本和选区。组合输入期间跳过转换；格式操作和快捷转换注册撤销。显示字体通过平台倍率放大，写回时还原，避免反复桥接导致字号增长。
 
-## 后续边界
+## 数据与恢复
 
-CloudKit 已确认为后续方向，但没有容器、账号或同步代码。当前 JSON 不承诺跨设备合并，不能放入云盘来代替同步。
-大规模内容需要评估写入调度、数据库和迁移；当前同步写入不是长期性能方案。
-UITextView/NSTextView 深度扩展和 TextKit 2 自定义未实现。
-画板与导图后续使用独立可编辑内容对象，正文显示引用预览。附件下载、缓存与冲突处理需要另行实现。
+`Note.richText` 是主数据，`text` 为标题和搜索使用的纯文本投影。`NoteAttributeScope` 保存 SwiftUI 属性、`CodeStyleAttribute` 与 `ParagraphStyleAttribute`。代码属性区分 inline 与带 ID 的 block；段落属性保存标题、引用等角色。列表仍包含文本前缀，不是完整结构化列表树。
 
-验证方法与命令见 [README](../README.md)。编译与存储测试不替代真实输入法、辅助功能、移动设备交互或 CloudKit 验证。
+稳定 UUID 在创建时生成；列表保持创建顺序，输入不触发重新排序。存储由应用实例持有，Observation 驱动 UI。每次修改同步原子写入 Application Support 下 `Weave/notes.json`，实际目录受沙箱和启动方式影响。
 
-_Last updated: 2026-09-10 — 记录第一期实际源代码与存储边界。_
+旧数据缺少 richText 时读取为普通文本；已有富文本损坏、为空值或与投影不一致时禁止覆盖。读取失败保留原文件并禁写；保存失败保留当前进程的内存修改，可重试。持久化测试使用隔离临时目录，不能用用户真实笔记进行破坏性验证。
 
-Markdown 快捷输入：行首 `#` 至 `######`、`-` / `*` / `+`、`>` 加空格；行内 `**加粗**`、`*斜体*`、反引号代码闭合后自动转换。支持有序列表和待办快捷输入，以及三个反引号加回车进入代码块。标题回车恢复正文，列表回车续写、空行退出；macOS 列表支持 Tab / Shift-Tab 缩进。代码块空行回车退出。选中文字粘贴 URL 添加链接，Cmd-K 打开链接编辑。待办标记可点击切换并撤销。多字符 Markdown 粘贴仍需手动转换。
+## 未实现与限制
 
-代码样式通过 `CodeStyleAttribute` 区分行内代码和带标识的代码块，包含代码内部换行；`NoteAttributeScope` 同时保存原 SwiftUI 属性与代码角色。`CodeLayoutManager` 在原生文字背景阶段绘制表面，保留原生选区和插入点。旧版等宽代码及其高亮在展示桥接时兼容，正文字符不变。
+- CloudKit 是确认的后续方向，没有账号、容器或同步实现。当前 JSON 不支持跨设备合并。
+- 同步全量写入用于小规模起步，长文档与大笔记库性能待评估。
+- 列表缩进和勾选属于文本编辑能力，没有独立待办模型、自动重编号或完整嵌套语义。
+- 无删除 / 回收站、画板、导图、附件缓存；导入导出与冲突策略需另行设计。
+- 多平台编译不能证明触控、输入法、辅助功能或多设备同步通过。
+
+现状依据上述源码；验证方法见[验证清单](verification.md)。
