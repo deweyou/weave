@@ -20,12 +20,13 @@
 - `Note.richText` 为主数据，纯文本用于搜索与标题。新增持久化属性时检查 `NoteAttributeScope`、平台桥接、旧数据与重启恢复。
 - 本地保存与同步分离。未上传内容不能作为缓存清理；同步不替代备份。不用云盘中的 JSON 冒充 CloudKit 同步。
 - 新增源码同时核对 Swift Package 与 Xcode target。命令从工作区根目录执行，产物放 `.build/`，不提交用户笔记、账号信息或机器路径。
+- App 预览默认复用并激活已有实例，不反复使用 `open -n`。需要加载新构建时，先确认对应测试实例已保存，再正常退出并重启该实例；核对进程路径和隔离会话，不关闭用户正式实例，不使用全局 `killall`。操作后检查实例数量，避免遗留重复 App。
 
 ## 设计 skills 的使用边界
 
 UI 任务使用 [apple-design](.agents/skills/apple-design/SKILL.md)；视觉审核按需加用 [high-end-visual-design](.agents/skills/high-end-visual-design/SKILL.md)。二者包含 Web 专用建议，使用前先读 DESIGN.md 的适配规则。
 
-沿用用户确认的 Apple 原生控件、系统字体、SF Symbols、正文清晰背景和稳定编辑。审美 skill 用于检查层级、留白、材质与反馈，不引入 React/Tailwind、营销页布局、强制入场动画或随机视觉风格；不为满足第三方 skill 更换原生技术路线。
+沿用用户确认的 Apple 原生控件、系统字体、SF Symbols、正文清晰背景和稳定编辑。界面图标默认使用 SF Symbols；例外条件、依赖边界和验收要求见 `DESIGN.md` 的“图标系统”。审美 skill 用于检查层级、留白、材质与反馈，不引入 React/Tailwind、营销页布局、强制入场动画或随机视觉风格；不为满足第三方 skill 更换原生技术路线。
 
 ## Harness 与交付
 

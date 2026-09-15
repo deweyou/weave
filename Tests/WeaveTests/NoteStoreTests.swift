@@ -5,6 +5,21 @@ import SwiftUI
 
 @MainActor
 struct NoteStoreTests {
+    @Test func importedRichTextCreatesSeparateDurableRecord() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore(directory: directory)
+        store.createNote()
+        let original = store.notes[0]
+        let imported = MarkdownFormatting.render("# Imported\n**Strong**\n- [x] Done")
+        store.createNote(richText: imported)
+        #expect(store.notes.count == 2)
+        #expect(store.notes[1] == original)
+        #expect(store.notes[0].richText == imported)
+        #expect(store.selectedID == store.notes[0].id)
+        #expect(NoteStore(directory: directory).notes == store.notes)
+    }
+
     @Test func chineseNotesSurviveRestartWithStableIdentity() throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -20,8 +35,8 @@ struct NoteStoreTests {
         let restored = NoteStore(directory: directory)
         #expect(restored.notes == store.notes)
         #expect(restored.notes.map(\.id) == [secondID, firstID])
-        #expect(restored.notes.last?.title == "周末计划")
-        #expect(restored.notes.last?.preview == "去海边走走 🌊 带上相机")
+        #expect(restored.notes.last?.title == "")
+        #expect(restored.notes.last?.preview == "周末计划 去海边走走 🌊 带上相机")
         #expect(!restored.hasUnsavedChanges)
     }
 
@@ -94,8 +109,8 @@ struct NoteStoreTests {
         let note = try #require(restored.notes.first)
         #expect(note.richText == document)
         #expect(note.richText[note.richText.startIndex..<note.richText.index(note.richText.startIndex, offsetByCharacters: 3)].font == .title.bold())
-        #expect(note.title == "标题")
-        #expect(note.preview == "重点中文网站")
+        #expect(note.title == "")
+        #expect(note.preview == "标题 重点中文网站")
         restored.updateText(id: id, text: note.text)
         #expect(restored.notes.first?.richText == AttributedString(note.text))
         #expect(NoteStore(directory: directory).notes == restored.notes)
@@ -112,7 +127,8 @@ struct NoteStoreTests {
         let note = try #require(store.notes.first)
         #expect(store.loadError == nil)
         #expect(note.id == id)
-        #expect(note.richText == AttributedString("旧版中文"))
+        #expect(note.title == "旧版中文")
+        #expect(note.richText == AttributedString())
         #expect(note.createdAt == Date(timeIntervalSinceReferenceDate: 12))
         #expect(note.updatedAt == Date(timeIntervalSinceReferenceDate: 34))
     }
@@ -154,6 +170,75 @@ struct NoteStoreTests {
         #expect(NoteStore(directory: directory).notes.first?.richText == AttributedString("中文"))
         undoManager.redo()
         #expect(NoteStore(directory: directory).notes.first?.richText == formatted)
+    }
+
+    @Test func independentTitlePersistsWithoutChangingBodyOrMarkdown() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore(directory: directory)
+        let body = MarkdownFormatting.render("# 正文标题\n\n正文 **重点**")
+        store.createNote(title: "文件名", richText: body)
+        let id = try #require(store.selectedID)
+        let markdown = MarkdownFormatting.serialize(body, context: EnvironmentValues().fontResolutionContext)
+        store.updateTitle(id: id, title: "新标题\n第二行")
+        let restored = NoteStore(directory: directory)
+        let note = try #require(restored.notes.first)
+        #expect(note.title == "新标题 第二行")
+        #expect(note.displayTitle == "新标题 第二行")
+        #expect(note.markdownFilename == "新标题 第二行")
+        #expect(note.richText == body)
+        #expect(MarkdownFormatting.serialize(note.richText, context: EnvironmentValues().fontResolutionContext) == markdown)
+        restored.updateTitle(id: id, title: "")
+        let untitled = try #require(NoteStore(directory: directory).notes.first)
+        #expect(untitled.title.isEmpty)
+        #expect(untitled.displayTitle == "未命名记录")
+        #expect(untitled.richText == body)
+    }
+
+    @Test func legacyRichTitleMigrationSeparatesTitleAndPreservesBody() throws {
+        var note = Note(id: UUID(), text: "", createdAt: .now, updatedAt: .now)
+        note.richText = MarkdownFormatting.render("# 原来的标题\n\n正文 **重点**")
+        let encoded = try JSONEncoder().encode(note)
+        var legacy = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        legacy.removeValue(forKey: "title")
+        legacy.removeValue(forKey: "titleSeparated")
+        let decoded = try JSONDecoder().decode(Note.self, from: JSONSerialization.data(withJSONObject: legacy))
+        #expect(decoded.title == "原来的标题")
+        #expect(decoded.text == "正文 重点")
+        #expect(decoded.id == note.id)
+        #expect(decoded.createdAt == note.createdAt)
+        #expect(decoded.updatedAt == note.updatedAt)
+        let roundTrip = try JSONDecoder().decode(Note.self, from: JSONEncoder().encode(decoded))
+        #expect(roundTrip == decoded)
+    }
+
+    @Test func legacyTitleMigrationPreservesRichBodyFormatting() throws {
+        var title = AttributedString("  旧标题  \n")
+        title.font = .title
+        var body = AttributedString("正文")
+        body.font = .body.bold()
+        let original = title + body
+        var note = Note(id: UUID(), text: "", createdAt: .now, updatedAt: .now)
+        note.richText = original
+        var encoded = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(note)) as? [String: Any])
+        encoded.removeValue(forKey: "title")
+        encoded.removeValue(forKey: "titleSeparated")
+        let decoded = try JSONDecoder().decode(Note.self, from: JSONSerialization.data(withJSONObject: encoded))
+        #expect(decoded.title == "旧标题")
+        #expect(decoded.text == "正文")
+        #expect(decoded.richText.font == .body.bold())
+    }
+
+    @Test func transitionalTitleStorageCompletesSeparationOnce() throws {
+        let note = Note(id: UUID(), text: "旧标题\n正文", createdAt: .now, updatedAt: .now, title: "旧标题")
+        let encoded = try JSONEncoder().encode(note)
+        var transitional = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        transitional.removeValue(forKey: "titleSeparated")
+        let migrated = try JSONDecoder().decode(Note.self, from: JSONSerialization.data(withJSONObject: transitional))
+        #expect(migrated.title == "旧标题")
+        #expect(migrated.text == "正文")
+        let stable = try JSONDecoder().decode(Note.self, from: JSONEncoder().encode(migrated))
+        #expect(stable == migrated)
     }
 
     private func temporaryDirectory() -> URL {

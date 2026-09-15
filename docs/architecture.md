@@ -7,20 +7,37 @@
 | 文件 | 职责 |
 | --- | --- |
 | `Sources/Weave/WeaveApp.swift` | 生命周期、存储实例、Mac 新建命令 |
-| `Sources/Weave/WorkspaceView.swift` | 分栏、列表与搜索、格式菜单、链接表单、错误状态 |
+| `Sources/Weave/WorkspaceView.swift` | 分栏、列表与搜索、格式工具条与菜单、链接表单、Markdown 文件面板、错误状态 |
 | `Sources/Weave/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、字体映射、选区与输入属性、快捷输入接入、原生背景绘制 |
-| `Sources/Weave/ParagraphEditing.swift` | 整段格式操作、段落角色、待办标记切换 |
+| `Sources/Weave/ParagraphEditing.swift` | `DocumentTypography` 排版配置、独立行内强调、整段格式操作、旧语义字体迁移、待办标记切换 |
 | `Sources/Weave/MarkdownShortcut.swift` | 单次输入触发的局部转换规则，UTF-16 范围 |
-| `Sources/Weave/MarkdownFormatting.swift` | 选区 / 全文 Markdown 转换，非无损编解码器 |
+| `Sources/Weave/MarkdownFormatting.swift` | 常用 Markdown 导入与语义导出，非全部富文本的无损编解码器 |
+| `Sources/Weave/TableData.swift` | 表格 Codable 模型、行列操作、Markdown 表格交换与纯文本投影 |
+| `Sources/Weave/NativeTableView.swift` | 表格附件尺寸、原位单元格控件与行列菜单 |
+| `Sources/Weave/NativeTableOverlay.swift` | 表格控件与代码块工具栏随原生文本布局定位、复用与移除 |
+| `Sources/Weave/RichTextClipboard.swift` | 结构化选区剪贴板编解码与粘贴时的块标识去重 |
+| `Sources/Weave/CodeBlockEditing.swift` | 代码语言、块范围、缩进和基础词法高亮规则 |
 | `Sources/Weave/NoteStore.swift` | 身份、标题、搜索投影、JSON 读写和失败恢复 |
 
 当前自定义 `CodeLayoutManager: NSLayoutManager` 绘制行内代码、代码块背景和引用竖线，走 TextKit 1 布局路径；不能称作 TextKit 2 编辑器。macOS 以滚动容器内边距限制正文宽度，滚动条留在编辑区右边。
 
 输入事件经过平台 delegate、`Coordinator.intercept` 与局部转换规则，再发布富文本和选区。组合输入期间跳过转换；格式操作和快捷转换注册撤销。显示字体通过平台倍率放大，写回时还原，避免反复桥接导致字号增长。
 
+原生正文用 LF 表示段落边界、U+2028 表示段内换行；正文段后距由 `DocumentTypography.bodyParagraphSpacing` 控制。Markdown 交换在导入时消费块间的一个分隔空行，保留多余空段和代码块内部空行；导出恢复分隔语法，连续列表或引用保持紧凑。已有富文本中的换行不自动迁移，存储与结构化剪贴板直接保留这些字符。
+
+代码块的 `CodeHeaderOverlayController` 只承载语言和复制操作，代码文字继续留在同一 TextKit 文本存储中。布局委托在首行预留工具栏高度，避免文档开头忽略段前距时发生遮挡。语言编辑按块 ID 定位，通过原生编辑器的撤销路径修改，并保留正文选区。
+
 ## 数据与恢复
 
-`Note.richText` 是主数据，`text` 为标题和搜索使用的纯文本投影。`NoteAttributeScope` 保存 SwiftUI 属性、`CodeStyleAttribute` 与 `ParagraphStyleAttribute`。代码属性区分 inline 与带 ID 的 block；段落属性保存标题、引用等角色。列表仍包含文本前缀，不是完整结构化列表树。
+`Note.richText` 是主数据，`text` 为正文搜索和摘要使用的纯文本投影，`Note.title` 是独立持久化的纯文本字段，搜索同时匹配标题和正文。缺少标题分离标记的旧记录将首个非空行迁移为标题，并从正文中移除该行；其余富文本属性保持不变。迁移后的记录保存分离标记，后续不再根据正文猜测；显式空标题保持为空。`NoteAttributeScope` 保存 SwiftUI 属性、`CodeStyleAttribute`、`CodeLanguageAttribute`、`ParagraphStyleAttribute`、`QuoteAttribute`、`TaskStateAttribute`、`InlineEmphasisAttribute` 与 `TableAttribute`。代码属性区分 inline 与带 ID 的 block；段落属性保存标题、列表、任务和代码等内部角色，引用通过独立布尔属性叠加，因此可以包住这些段落类型。引用竖线和默认次要文字色只在原生显示层生成，不写入 Markdown 内容或用户颜色；旧引用的 `│ ` 前缀与旧 quote 段落角色在读取时迁移。任务完成状态独立保存且正文不包含 checkbox 占位字符，旧任务的 `☐ / ☑` 前缀在读取时迁移为该属性。行内强调以独立标志保存加粗和斜体，经过原生桥接、存储和结构化剪贴板保留，避免与标题自身的字重混淆。项目符号和有序列表仍包含文本前缀，不是完整结构化列表树。
+
+读取旧笔记时，仅将明确保存为旧 `.title` / `.title2` / `.title3` 的语义字体迁移为对应标题角色，并补齐旧标题的行内强调。无法确认语义的显式字号保留原样；显示布局不再通过字号阈值猜标题。新标题按角色和独立强调投影到当前排版配置。
+
+表格在富文本中保存一个 U+FFFC 附件字符和矩形 `TableData` 属性，首行为表头；平台附件和 SwiftUI 单元格控件按表格 ID 重建，控件在输入时复用。纯文本投影展开单元格，解码时校验展开内容；旧笔记不含表格时投影不变。表格不使用截图存储，也不使用独立弹窗编辑。每格当前为单行纯文本，超宽表格横向滚动，不支持合并单元格和富文本单元格。
+
+代码语言随块保存，导出包含语言标签；高亮目前为 Swift、JavaScript、TypeScript、Python、JSON、Shell 的基础词法规则，未知语言保留标签。显示颜色通过临时标记从持久化映射中排除，颜色不成为 Markdown 语义。代码不执行。
+
+包含表格或代码块的选区使用应用自有 Codable 剪贴板格式；粘贴时重建表格和代码块 ID，避免两个副本共用输入视图。表格同时提供 Markdown 文本，代码提供原文字面量供外部应用粘贴；普通文本与单元格内部编辑继续使用平台剪贴板。
 
 稳定 UUID 在创建时生成；列表保持创建顺序，输入不触发重新排序。存储由应用实例持有，Observation 驱动 UI。每次修改同步原子写入 Application Support 下 `Weave/notes.json`，实际目录受沙箱和启动方式影响。
 
@@ -31,7 +48,7 @@
 - CloudKit 是确认的后续方向，没有账号、容器或同步实现。当前 JSON 不支持跨设备合并。
 - 同步全量写入用于小规模起步，长文档与大笔记库性能待评估。
 - 列表缩进和勾选属于文本编辑能力，没有独立待办模型、自动重编号或完整嵌套语义。
-- 无删除 / 回收站、画板、导图、附件缓存；导入导出与冲突策略需另行设计。
+- 无删除 / 回收站、画板、导图、附件缓存；冲突策略需另行设计。Markdown 导入创建新记录，导出不改变主数据。
 - 多平台编译不能证明触控、输入法、辅助功能或多设备同步通过。
 
 现状依据上述源码；验证方法见[验证清单](verification.md)。

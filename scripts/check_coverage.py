@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 # UI declarations are covered by XCUITest separately; never hide them in totals.
-UI_FILES = {"WeaveApp.swift", "WorkspaceView.swift"}
-BRIDGE_FILES = {"NativeRichTextEditor.swift"}
+UI_FILES = {"WeaveApp.swift", "WorkspaceView.swift", "NativeTableView.swift"}
+BRIDGE_FILES = {"NativeRichTextEditor.swift", "NativeTableOverlay.swift"}
 THRESHOLDS = {"all": 35.0, "core": 90.0, "bridge": 55.0}
 
 
