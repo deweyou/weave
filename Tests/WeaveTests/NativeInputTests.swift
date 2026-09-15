@@ -91,6 +91,38 @@ struct NativeInputTests {
         #expect(String(view.string.dropFirst(nextLine)).prefix(while: { $0 == "\t" }).count == 1)
     }
 
+    @Test func secondReturnOnEmptyBulletExitsToBody() {
+        let (view, coordinator) = editor(MarkdownFormatting.render("- First"))
+        view.delegate = coordinator
+
+        #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\n"))
+        #expect(view.string == "• First\n• ")
+        #expect(view.typingAttributes[.weaveParagraphStyle] as? String == "bullet")
+
+        #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\n"))
+        #expect(view.string == "• First\n")
+        #expect(view.typingAttributes[.weaveParagraphStyle] as? String == "body")
+
+        view.insertText("Body", replacementRange: view.selectedRange())
+        #expect(view.string == "• First\nBody")
+    }
+
+    @Test func secondReturnOnEmptyTaskExitsToBody() {
+        let (view, coordinator) = editor(MarkdownFormatting.render("- [ ] Task"))
+        view.delegate = coordinator
+
+        #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\n"))
+        #expect(view.string == "Task\n")
+        #expect(view.typingAttributes[.weaveParagraphStyle] as? String == "task")
+
+        #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\n"))
+        #expect(view.string == "Task\n")
+        #expect(view.typingAttributes[.weaveParagraphStyle] as? String == "body")
+
+        view.insertText("Body", replacementRange: view.selectedRange())
+        #expect(view.string == "Task\nBody")
+    }
+
     private func editor(_ source: AttributedString) -> (NSTextView, NativeRichTextEditor.Coordinator) {
         var text = source
         var selection = AttributedTextSelection(insertionPoint: source.endIndex)
@@ -484,8 +516,15 @@ struct NativeInputTests {
         let nativeBody = NativeTextAttributes.native(bodySample, context: EnvironmentValues().fontResolutionContext)
         view.typingAttributes = nativeBody.attributes(at: 0, effectiveRange: nil)
 
+        layout.ensureLayout(for: container)
+        let bodyExtraLineX = layout.extraLineFragmentUsedRect.minX
         view.insertText(">", replacementRange: view.selectedRange())
         view.insertText(" ", replacementRange: view.selectedRange())
+        coordinator.update(coordinator.parent)
+        let emptyQuoteStyle = try #require(view.typingAttributes[.paragraphStyle] as? NSParagraphStyle)
+        #expect(view.string.isEmpty)
+        #expect(emptyQuoteStyle.firstLineHeadIndent == DocumentTypography.quoteIndent)
+        #expect(abs(layout.extraLineFragmentUsedRect.minX - bodyExtraLineX - DocumentTypography.quoteIndent) < 0.5)
         view.insertText("1", replacementRange: view.selectedRange())
         #expect(view.string == "1")
         #expect(view.typingAttributes[.weaveQuote] as? Bool == true)

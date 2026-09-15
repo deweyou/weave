@@ -48,6 +48,25 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
     }
     private var baselineOffsets: [BaselineKey: CGFloat] = [:]
     #endif
+    #if os(macOS)
+    var emptyLineHeadIndent: CGFloat = 0 {
+        didSet {
+            guard emptyLineHeadIndent != oldValue,
+                  let container = textContainers.first else { return }
+            textContainerChangedGeometry(container)
+            ensureLayout(for: container)
+            guard let extraContainer = extraLineFragmentTextContainer else { return }
+            // Resetting the native extra fragment makes NSTextView discard the
+            // stale insertion rect it caches for a completely empty document.
+            // The typesetter has already applied the typing paragraph's indent.
+            super.setExtraLineFragmentRect(
+                extraLineFragmentRect,
+                usedRect: extraLineFragmentUsedRect,
+                textContainer: extraContainer
+            )
+        }
+    }
+    #endif
     var hoveredTaskMarker: Int? {
         didSet {
             guard hoveredTaskMarker != oldValue else { return }
@@ -1468,6 +1487,12 @@ struct NativeRichTextEditor {
                     attributes[.foregroundColor] = UIColor.secondaryLabel
                     #endif
                     attributes[.weaveQuoteColor] = true
+                    var quoteSample = AttributedString("\n")
+                    quoteSample.font = .body
+                    quoteSample[ParagraphStyleAttribute.self] = "body"
+                    quoteSample[QuoteAttribute.self] = true
+                    let nativeQuote = NativeTextAttributes.native(quoteSample, context: parent.fontContext)
+                    attributes[.paragraphStyle] = nativeQuote.attribute(.paragraphStyle, at: 0, effectiveRange: nil)
                 case .numbered: attributes[.weaveParagraphStyle] = "numbered"
                 case .bullet: attributes[.weaveParagraphStyle] = "bullet"
                 case .task: attributes[.weaveParagraphStyle] = "task"
@@ -1846,6 +1871,12 @@ final class ReadingMacTextView: NSTextView {
         ).offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
     }
     fileprivate func updateEmptyQuoteBar() {
+        if let layout = layoutManager as? CodeLayoutManager {
+            layout.emptyLineHeadIndent = string.isEmpty
+                && typingAttributes[.weaveQuote] as? Bool == true
+                ? DocumentTypography.quoteIndent
+                : 0
+        }
         quoteDecorationView?.needsDisplay = true
     }
     override func draw(_ dirtyRect: NSRect) {

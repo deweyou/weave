@@ -46,6 +46,21 @@ final class WeaveUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    #if os(macOS)
+    private func copiedMarkdown() -> String {
+        let pasteboard = NSPasteboard.general
+        let previousChangeCount = pasteboard.changeCount
+        app.menuButtons["Markdown"].tap()
+        app.menuItems["copy-markdown"].tap()
+        let deadline = Date().addingTimeInterval(3)
+        while pasteboard.changeCount == previousChangeCount, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertNotEqual(pasteboard.changeCount, previousChangeCount, "复制 Markdown 后剪贴板应更新")
+        return pasteboard.string(forType: .string) ?? ""
+    }
+    #endif
+
     func testCreateEditAndRestoreAfterRelaunch() {
         newNote()
         let title = app.textFields["note-title"]
@@ -109,6 +124,65 @@ final class WeaveUITests: XCTestCase {
     #endif
 
     #if os(macOS)
+    func testSecondReturnExitsEmptyBulletItem() {
+        newNote()
+        for character in "- " { editor.typeText(String(character)) }
+        editor.typeText("First")
+        editor.typeKey(.escape, modifierFlags: [])
+        editor.typeText("\n")
+        editor.typeText("\n")
+        editor.typeText("Body")
+        expectText("• First\nBody")
+    }
+
+    func testSecondReturnExitsEmptyTaskItem() {
+        newNote()
+        for character in "[] " { editor.typeText(String(character)) }
+        editor.typeText("Task")
+        editor.typeKey(.escape, modifierFlags: [])
+        editor.typeText("\n")
+        editor.typeText("\n")
+        editor.typeText("Body")
+        expectText("☐ Task\nBody")
+    }
+
+    func testSecondReturnExitsQuoteBeforeFollowingBody() {
+        newNote()
+        for character in "> " { editor.typeText(String(character)) }
+        editor.typeText("1")
+        editor.typeKey(.escape, modifierFlags: [])
+        editor.typeText("\n")
+        editor.typeText("\n")
+        editor.typeText("Body")
+        expectText("1\nBody")
+        XCTAssertEqual(copiedMarkdown(), "> 1\n\nBody")
+    }
+
+    func testBackspaceOnEmptiedHeadingClearsHeadingStyle() {
+        newNote()
+        for character in "# " { editor.typeText(String(character)) }
+        editor.typeText("Heading")
+        editor.typeKey("a", modifierFlags: .command)
+        editor.typeKey(.delete, modifierFlags: [])
+        editor.typeKey(.delete, modifierFlags: [])
+        editor.typeText("Body")
+        expectText("Body")
+        XCTAssertEqual(copiedMarkdown(), "Body")
+    }
+
+    func testDeletingInlineCodeContentClearsTypingStyle() {
+        newNote()
+        editor.typeText("`")
+        editor.typeText("code")
+        editor.typeText("`")
+        expectText("code")
+        editor.typeKey("a", modifierFlags: .command)
+        editor.typeKey(.delete, modifierFlags: [])
+        editor.typeText("next")
+        expectText("next")
+        XCTAssertEqual(copiedMarkdown(), "next")
+    }
+
     func testTableEditsInlineAndRestoresAfterRelaunch() {
         newNote()
         app.buttons["insert-table"].tap()
