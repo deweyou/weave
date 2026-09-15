@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor
 struct NoteStoreTests {
-    @Test func importedRichTextCreatesSeparateDurableRecord() throws {
+    @Test func importedRichTextCreatesSeparateDurableRecord() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = NoteStore(directory: directory)
@@ -17,10 +17,11 @@ struct NoteStoreTests {
         #expect(store.notes[1] == original)
         #expect(store.notes[0].richText == imported)
         #expect(store.selectedID == store.notes[0].id)
+        await store.flushPendingSave()
         #expect(NoteStore(directory: directory).notes == store.notes)
     }
 
-    @Test func chineseNotesSurviveRestartWithStableIdentity() throws {
+    @Test func chineseNotesSurviveRestartWithStableIdentity() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = NoteStore(directory: directory)
@@ -32,6 +33,7 @@ struct NoteStoreTests {
         let secondID = try #require(store.selectedID)
         store.updateText(id: secondID, text: "写作灵感\n保持简单，慢慢生长。")
 
+        await store.flushPendingSave()
         let restored = NoteStore(directory: directory)
         #expect(restored.notes == store.notes)
         #expect(restored.notes.map(\.id) == [secondID, firstID])
@@ -40,7 +42,7 @@ struct NoteStoreTests {
         #expect(!restored.hasUnsavedChanges)
     }
 
-    @Test func corruptedFileBlocksMutationAndCanBeReloadedAfterRepair() throws {
+    @Test func corruptedFileBlocksMutationAndCanBeReloadedAfterRepair() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -60,11 +62,12 @@ struct NoteStoreTests {
         store.reload()
         #expect(store.loadError == nil)
         store.createNote()
+        await store.flushPendingSave()
         #expect(store.notes.count == 1)
         #expect(NoteStore(directory: directory).notes == store.notes)
     }
 
-    @Test func failedWritePreservesMemoryUntilRetrySucceeds() throws {
+    @Test func failedWritePreservesMemoryUntilRetrySucceeds() async throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -75,6 +78,7 @@ struct NoteStoreTests {
         store.createNote()
         let id = try #require(store.selectedID)
         store.updateText(id: id, text: "尚未保存的中文内容")
+        await store.flushPendingSave()
         #expect(store.hasUnsavedChanges)
         #expect(store.saveError != nil)
         store.reload()
@@ -82,12 +86,13 @@ struct NoteStoreTests {
 
         try FileManager.default.removeItem(at: directory)
         store.retrySave()
+        await store.flushPendingSave()
         #expect(!store.hasUnsavedChanges)
         #expect(store.saveError == nil)
         #expect(NoteStore(directory: directory).notes == store.notes)
     }
 
-    @Test func richFormattingSurvivesRestartAndPlainEditResetsIt() throws {
+    @Test func richFormattingSurvivesRestartAndPlainEditResetsIt() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = NoteStore(directory: directory)
@@ -104,6 +109,7 @@ struct NoteStoreTests {
         let document = heading + emphasis + link
         store.updateRichText(id: id, text: document)
 
+        await store.flushPendingSave()
         let restored = NoteStore(directory: directory)
         #expect(restored.loadError == nil)
         let note = try #require(restored.notes.first)
@@ -112,6 +118,7 @@ struct NoteStoreTests {
         #expect(note.title == "")
         #expect(note.preview == "标题 重点中文网站")
         restored.updateText(id: id, text: note.text)
+        await restored.flushPendingSave()
         #expect(restored.notes.first?.richText == AttributedString(note.text))
         #expect(NoteStore(directory: directory).notes == restored.notes)
     }
@@ -151,7 +158,7 @@ struct NoteStoreTests {
         }
     }
 
-    @Test func formattingUndoRedoPersistsEachState() throws {
+    @Test func formattingUndoRedoPersistsEachState() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = NoteStore(directory: directory)
@@ -165,14 +172,33 @@ struct NoteStoreTests {
         undoManager.beginUndoGrouping()
         store.applyRichEdit(id: id, text: formatted, undoManager: undoManager)
         undoManager.endUndoGrouping()
+        await store.flushPendingSave()
         #expect(NoteStore(directory: directory).notes.first?.richText == formatted)
         undoManager.undo()
+        await store.flushPendingSave()
         #expect(NoteStore(directory: directory).notes.first?.richText == AttributedString("中文"))
         undoManager.redo()
+        await store.flushPendingSave()
         #expect(NoteStore(directory: directory).notes.first?.richText == formatted)
     }
 
-    @Test func independentTitlePersistsWithoutChangingBodyOrMarkdown() throws {
+    @Test func rapidEditsPersistOnlyAfterTheLatestSnapshotCompletes() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore(directory: directory)
+        store.createNote()
+        let id = try #require(store.selectedID)
+        for index in 0..<100 {
+            store.updateText(id: id, text: "第 \(index) 次编辑")
+        }
+
+        await store.flushPendingSave()
+
+        #expect(!store.hasUnsavedChanges)
+        #expect(NoteStore(directory: directory).notes.first?.text == "第 99 次编辑")
+    }
+
+    @Test func independentTitlePersistsWithoutChangingBodyOrMarkdown() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = NoteStore(directory: directory)
@@ -181,6 +207,7 @@ struct NoteStoreTests {
         let id = try #require(store.selectedID)
         let markdown = MarkdownFormatting.serialize(body, context: EnvironmentValues().fontResolutionContext)
         store.updateTitle(id: id, title: "新标题\n第二行")
+        await store.flushPendingSave()
         let restored = NoteStore(directory: directory)
         let note = try #require(restored.notes.first)
         #expect(note.title == "新标题 第二行")
@@ -189,6 +216,7 @@ struct NoteStoreTests {
         #expect(note.richText == body)
         #expect(MarkdownFormatting.serialize(note.richText, context: EnvironmentValues().fontResolutionContext) == markdown)
         restored.updateTitle(id: id, title: "")
+        await restored.flushPendingSave()
         let untitled = try #require(NoteStore(directory: directory).notes.first)
         #expect(untitled.title.isEmpty)
         #expect(untitled.displayTitle == "未命名记录")

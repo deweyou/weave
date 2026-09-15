@@ -22,6 +22,20 @@
 - 新增源码同时核对 Swift Package 与 Xcode target。命令从工作区根目录执行，产物放 `.build/`，不提交用户笔记、账号信息或机器路径。
 - App 预览默认复用并激活已有实例，不反复使用 `open -n`。需要加载新构建时，先确认对应测试实例已保存，再正常退出并重启该实例；核对进程路径和隔离会话，不关闭用户正式实例，不使用全局 `killall`。操作后检查实例数量，避免遗留重复 App。
 
+## Swift 规则与 skills
+
+编写或评审 Swift 代码前读取 [Weave Swift 代码规范](.agents/rules/swift-code-style.md)。
+它与本文件共同构成仓库约束，并优先于第三方 skill 的通用建议。
+
+- SwiftUI 状态、视图组合、性能、无障碍或 macOS 场景任务使用
+  [swiftui-expert-skill](.agents/skills/swiftui-expert-skill/SKILL.md)，只加载与当前任务相关的 reference。
+- 涉及 `async`/`await`、actor、`Sendable`、取消或同步/异步桥接时使用
+  [swift-concurrency-pro](.agents/skills/swift-concurrency-pro/SKILL.md)。
+- 编写或评审 Swift Testing 用例时使用
+  [swift-testing-pro](.agents/skills/swift-testing-pro/SKILL.md)；UI tests 继续使用 XCTest。
+- AppKit/UIKit 桥接是编辑器的既定边界。第三方 skill 中偏 iOS、纯 SwiftUI 或文件拆分的建议不能覆盖
+  当前源码、`DESIGN.md` 和本文件确认的边界。
+
 ## 设计 skills 的使用边界
 
 UI 任务使用 [apple-design](.agents/skills/apple-design/SKILL.md)；视觉审核按需加用 [high-end-visual-design](.agents/skills/high-end-visual-design/SKILL.md)。二者包含 Web 专用建议，使用前先读 DESIGN.md 的适配规则。

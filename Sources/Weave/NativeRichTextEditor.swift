@@ -475,8 +475,7 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         return taskMarkerRect(textX: textX, baseline: baseline, font: font, ascent: ascent, descent: descent)
     }
 
-    #if os(macOS)
-    func emptyTaskMarkerRect(at insertion: Int, font: NSFont, quoted: Bool,
+    func emptyTaskMarkerRect(at insertion: Int, font: PlatformFont, quoted: Bool,
                              in container: NSTextContainer) -> CGRect {
         let fragment: CGRect
         if let storage = textStorage, storage.length > 0, insertion < storage.length {
@@ -485,7 +484,11 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
             fragment = extraLineFragmentRect
         }
         let lineHeight = NativeTextAttributes.stableLineHeight(for: font)
+        #if os(macOS)
         let baseline = fragment.minY + stableBaselineOffset(fontSize: font.pointSize, lineHeight: lineHeight)
+        #else
+        let baseline = fragment.minY + max(0, (lineHeight - font.lineHeight) / 2) + font.ascender
+        #endif
         let textX = fragment.minX + DocumentTypography.listIndent
             + (quoted ? DocumentTypography.quoteIndent : 0)
         return taskMarkerRect(
@@ -496,7 +499,6 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
             descent: CTFontGetDescent(font as CTFont)
         )
     }
-    #endif
 
     private func taskMarkerRect(textX: CGFloat, baseline: CGFloat, font: PlatformFont,
                                 ascent: CGFloat, descent: CGFloat) -> CGRect {
@@ -545,10 +547,6 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         let paragraph = source.paragraphRange(for: NSRange(location: probe, length: 0))
         guard let marker = taskMarkerIndex(in: paragraph), insertion == marker else { return nil }
         return marker
-    }
-
-    func selectionAvoidingTaskMarker(_ selection: NSRange) -> NSRange {
-        selection
     }
 
     fileprivate func drawTaskMarker(checked: Bool, hovered: Bool, in rect: CGRect) {
@@ -677,14 +675,24 @@ enum NativeTextAttributes {
         return ceil(max(font.pointSize * DocumentTypography.lineHeightRatio, ascent + descent + leading)) + 1
     }
 
-    private static func layoutInlineCode(_ text: NSMutableAttributedString) {
+    private static func paragraphRegion(in text: NSAttributedString, around affected: NSRange?) -> NSRange {
         let whole = NSRange(location: 0, length: text.length)
-        text.enumerateAttribute(.weaveInlineSpacing, in: whole) { previous, range, _ in
+        guard let affected, text.length > 0 else { return whole }
+        let source = text.string as NSString
+        let lowerProbe = max(0, min(text.length - 1, affected.location - 1))
+        let upperProbe = max(lowerProbe, min(text.length - 1, NSMaxRange(affected)))
+        let lower = source.paragraphRange(for: NSRange(location: lowerProbe, length: 0)).location
+        let upper = NSMaxRange(source.paragraphRange(for: NSRange(location: upperProbe, length: 0)))
+        return NSRange(location: lower, length: upper - lower)
+    }
+
+    private static func layoutInlineCode(_ text: NSMutableAttributedString, in region: NSRange) {
+        text.enumerateAttribute(.weaveInlineSpacing, in: region) { previous, range, _ in
             guard let previous = previous as? CGFloat else { return }
             if previous == 0 { text.removeAttribute(.kern, range: range) }
             else { text.addAttribute(.kern, value: previous, range: range) }
         }
-        text.removeAttribute(.weaveInlineSpacing, range: whole)
+        text.removeAttribute(.weaveInlineSpacing, range: region)
         let source = text.string as NSString
         func addGap(at index: Int, amount: CGFloat) {
             guard amount > 0 else { return }
@@ -703,8 +711,11 @@ enum NativeTextAttributes {
         func spaceWidth(at index: Int) -> CGFloat {
             CGFloat(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(text.attributedSubstring(from: NSRange(location: index, length: 1))), nil, nil, nil))
         }
-        text.enumerateAttribute(.weaveCodeStyle, in: whole) { value, range, _ in
-            guard value as? String == "inline", range.length > 0 else { return }
+        text.enumerateAttribute(.weaveCodeStyle, in: region) { value, clippedRange, _ in
+            guard value as? String == "inline", clippedRange.length > 0 else { return }
+            var range = NSRange()
+            _ = text.attribute(.weaveCodeStyle, at: clippedRange.location, longestEffectiveRange: &range,
+                               in: NSRange(location: 0, length: text.length))
             let size = (text.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont)?.pointSize ?? DocumentTypography.bodySize * DocumentTypography.inlineCodeScale
             if range.location > 0 {
                 let previous = source.rangeOfComposedCharacterSequence(at: range.location - 1)
@@ -735,10 +746,10 @@ enum NativeTextAttributes {
         }
     }
 
-    static func layoutParagraphs(_ text: NSMutableAttributedString) {
-        layoutInlineCode(text)
-        let whole = NSRange(location: 0, length: text.length)
-        text.enumerateAttribute(.weaveQuoteColor, in: whole) { value, range, _ in
+    static func layoutParagraphs(_ text: NSMutableAttributedString, around affected: NSRange? = nil) {
+        let region = paragraphRegion(in: text, around: affected)
+        layoutInlineCode(text, in: region)
+        text.enumerateAttribute(.weaveQuoteColor, in: region) { value, range, _ in
             guard value != nil else { return }
             #if os(macOS)
             text.addAttribute(.foregroundColor, value: NSColor.textColor, range: range)
@@ -746,10 +757,10 @@ enum NativeTextAttributes {
             text.addAttribute(.foregroundColor, value: UIColor.label, range: range)
             #endif
         }
-        text.removeAttribute(.weaveQuoteColor, range: whole)
+        text.removeAttribute(.weaveQuoteColor, range: region)
         let source = text.string as NSString
-        var location = 0
-        while location < source.length {
+        var location = region.location
+        while location < NSMaxRange(region) {
             let range = source.paragraphRange(for: NSRange(location: location, length: 0))
             let content = source.substring(with: range).trimmingCharacters(in: .newlines)
             var font = text.attribute(.font, at: location, effectiveRange: nil) as? PlatformFont
@@ -917,8 +928,17 @@ enum NativeTextAttributes {
         return result
     }
 
-    static func highlightCode(_ text: NSMutableAttributedString) {
+    static func highlightCode(_ text: NSMutableAttributedString, around affected: NSRange? = nil) {
+        var region = paragraphRegion(in: text, around: affected)
         let whole = NSRange(location: 0, length: text.length)
+        if region.length > 0 {
+            text.enumerateAttribute(.weaveCodeStyle, in: region) { value, clippedRange, _ in
+                guard let id = value as? String, id.hasPrefix("block:") || id == "inline" else { return }
+                var effective = NSRange()
+                _ = text.attribute(.weaveCodeStyle, at: clippedRange.location, longestEffectiveRange: &effective, in: whole)
+                region = NSUnionRange(region, effective)
+            }
+        }
         #if os(macOS)
         let base = NSColor.textColor
         let inlineColor = NSColor.textColor
@@ -926,11 +946,13 @@ enum NativeTextAttributes {
         let base = UIColor.label
         let inlineColor = UIColor.label
         #endif
-        text.enumerateAttribute(.weaveSyntaxColor, in: whole) { marker, range, _ in
+        text.enumerateAttribute(.weaveSyntaxColor, in: region) { marker, range, _ in
             if marker != nil { text.addAttribute(.foregroundColor, value: base, range: range) }
         }
-        text.removeAttribute(.weaveSyntaxColor, range: whole)
-        text.enumerateAttribute(.weaveCodeStyle, in: whole) { value, range, _ in
+        text.removeAttribute(.weaveSyntaxColor, range: region)
+        text.enumerateAttribute(.weaveCodeStyle, in: region) { value, clippedRange, _ in
+            var range = NSRange()
+            _ = text.attribute(.weaveCodeStyle, at: clippedRange.location, longestEffectiveRange: &range, in: whole)
             if value as? String == "inline" {
                 text.enumerateAttribute(.foregroundColor, in: range) { color, span, _ in
                     #if os(macOS)
@@ -1003,6 +1025,7 @@ struct NativeRichTextEditor {
     @Binding var text: AttributedString
     @Binding var selection: AttributedTextSelection
     var focusWhenEmpty = true
+    var focusRequest = 0
     var onEditLink: () -> Void = {}
     @Environment(\.fontResolutionContext) private var fontContext
 
@@ -1016,6 +1039,8 @@ struct NativeRichTextEditor {
         fileprivate var isUpdating = false
         private var locallyAppliedTypingAttributes: [NSAttributedString.Key: Any]?
         private var pendingTypingAttributesAfterInlineDeletion: [NSAttributedString.Key: Any]?
+        private var pendingNativeEditRange: NSRange?
+        private var handledFocusRequest: Int
         weak var textView: PlatformTextView?
         private let tables = TableOverlayController()
         private let codeHeaders = CodeHeaderOverlayController()
@@ -1023,6 +1048,7 @@ struct NativeRichTextEditor {
         init(parent: NativeRichTextEditor) {
             self.parent = parent
             lastValue = parent.text
+            handledFocusRequest = 0
         }
 
         fileprivate var storage: NSTextStorage? {
@@ -1073,9 +1099,6 @@ struct NativeRichTextEditor {
                 guard let first = ranges.ranges.first else { return }
                 range = NSRange(first, in: parent.text)
             }
-            if let layout = textView.layoutManager as? CodeLayoutManager {
-                range = layout.selectionAvoidingTaskMarker(range)
-            }
             if NSMaxRange(range) <= (storage?.length ?? 0), range != currentSelection { setSelection(range) }
             let attributes = parent.selection.typingAttributes(in: parent.text)
             let source = (storage?.string ?? "") as NSString
@@ -1107,14 +1130,24 @@ struct NativeRichTextEditor {
             (textView as? ReadingMacTextView)?.updateEmptyQuoteBar()
             #endif
             if let storage { lastNativeValue = NSAttributedString(attributedString: storage) }
+            if parent.focusRequest != handledFocusRequest {
+                handledFocusRequest = parent.focusRequest
+                DispatchQueue.main.async { [weak textView] in
+                    #if os(macOS)
+                    textView?.window?.makeFirstResponder(textView)
+                    #else
+                    textView?.becomeFirstResponder()
+                    #endif
+                }
+            }
         }
 
-        fileprivate func publish() {
+        fileprivate func publish(around affected: NSRange? = nil) {
             guard !isUpdating, let storage else { return }
             if !hasMarkedText {
                 isUpdating = true
-                NativeTextAttributes.layoutParagraphs(storage)
-                NativeTextAttributes.highlightCode(storage)
+                NativeTextAttributes.layoutParagraphs(storage, around: affected)
+                NativeTextAttributes.highlightCode(storage, around: affected)
                 isUpdating = false
             }
             let value = NativeTextAttributes.rich(storage)
@@ -1127,14 +1160,6 @@ struct NativeRichTextEditor {
 
         fileprivate func publishSelection(in value: AttributedString? = nil) {
             guard !isUpdating, !hasMarkedText, let textView else { return }
-            if let layout = textView.layoutManager as? CodeLayoutManager {
-                let normalized = layout.selectionAvoidingTaskMarker(currentSelection)
-                if normalized != currentSelection {
-                    isUpdating = true
-                    setSelection(normalized)
-                    isUpdating = false
-                }
-            }
             let text = value ?? parent.text
             guard let range = Range<AttributedString.Index>(currentSelection, in: text) else { return }
             if range.isEmpty {
@@ -1203,7 +1228,6 @@ struct NativeRichTextEditor {
             let range = currentSelection
             let selected = NativeTextAttributes.rich(storage.attributedSubstring(from: range))
             let hasTable = selected.runs.contains { $0[TableAttribute.self] != nil }
-            guard hasTable || selected.runs.contains(where: { $0[CodeStyleAttribute.self]?.hasPrefix("block:") == true }) else { return false }
             guard let encoded = try? RichTextClipboard.encode(selected) else {
                 #if os(macOS)
                 NSSound.beep()
@@ -1211,12 +1235,20 @@ struct NativeRichTextEditor {
                 return true // Never fall back to a lossy cut of a structured block.
             }
             let plain = hasTable ? MarkdownFormatting.serialize(selected, context: parent.fontContext) : String(selected.characters)
+            let nativeSelection = storage.attributedSubstring(from: range)
+            let richTextData = try? nativeSelection.data(
+                from: NSRange(location: 0, length: nativeSelection.length),
+                documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+            )
             #if os(macOS)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setData(encoded, forType: NSPasteboard.PasteboardType("app.weave.richtext"))
+            if let richTextData { NSPasteboard.general.setData(richTextData, forType: .rtf) }
             NSPasteboard.general.setString(plain, forType: .string)
             #else
-            UIPasteboard.general.setItems([["app.weave.richtext": encoded, "public.utf8-plain-text": plain]])
+            var item: [String: Any] = ["app.weave.richtext": encoded, "public.utf8-plain-text": plain]
+            if let richTextData { item["public.rtf"] = richTextData }
+            UIPasteboard.general.setItems([item])
             #endif
             if cut {
                 registerUndo(text: NSAttributedString(attributedString: storage), selection: range, attributes: view.typingAttributes)
@@ -1293,9 +1325,10 @@ struct NativeRichTextEditor {
             // At end-of-document, asking NSString for the paragraph at the caret
             // can resolve to its synthetic trailing paragraph. For deletion, the
             // affected character is the reliable paragraph anchor.
-            let paragraphAnchor = replacement.isEmpty && range.length > 0
-                ? min(range.location, source.length)
-                : min(caret.location, source.length)
+            let isTerminalEmptyParagraph = replacement == "\n" && range.length == 0
+                && source.length > 0 && source.hasSuffix("\n")
+                && range.location >= source.length - 1
+            let paragraphAnchor = isTerminalEmptyParagraph ? source.length : min(range.location, source.length)
             let paragraph: NSRange
             if paragraphAnchor == source.length, source.length > 0,
                source.substring(with: NSRange(location: source.length - 1, length: 1)) == "\n" {
@@ -1307,12 +1340,26 @@ struct NativeRichTextEditor {
                 paragraph = source.paragraphRange(for: NSRange(location: paragraphAnchor, length: 0))
             }
             let line = source.substring(with: paragraph).trimmingCharacters(in: .newlines)
-            let role = textView.typingAttributes[.weaveParagraphStyle] as? String
-            let code = textView.typingAttributes[.weaveCodeStyle] as? String
+            let trailingBoundary = paragraph.length == 0 && paragraph.location > 0
+                && source.substring(with: NSRange(location: paragraph.location - 1, length: 1)) == "\n"
+                ? paragraph.location - 1
+                : nil
+            // UIKit may resolve typing attributes from the following empty
+            // paragraph before asking the delegate about Return. The preceding
+            // newline is the durable semantic boundary for that paragraph.
+            let persistedAnchor = paragraph.location < storage.length ? paragraph.location : trailingBoundary
+            let role = persistedAnchor.flatMap {
+                storage.attribute(.weaveParagraphStyle, at: $0, effectiveRange: nil) as? String
+            } ?? textView.typingAttributes[.weaveParagraphStyle] as? String
+            let code = persistedAnchor.flatMap {
+                storage.attribute(.weaveCodeStyle, at: $0, effectiveRange: nil) as? String
+            } ?? textView.typingAttributes[.weaveCodeStyle] as? String
             let quoteAnchor = range.length > 0 && range.location < storage.length
                 ? range.location
                 : paragraph.location
-            let quoted = textView.typingAttributes[.weaveQuote] as? Bool == true
+            let quoted = (trailingBoundary.map {
+                storage.attribute(.weaveQuote, at: $0, effectiveRange: nil) as? Bool == true
+            } ?? (textView.typingAttributes[.weaveQuote] as? Bool == true))
                 || role == "quote"
                 || (quoteAnchor < storage.length
                     && storage.attribute(.weaveQuote, at: quoteAnchor, effectiveRange: nil) as? Bool == true)
@@ -1375,17 +1422,23 @@ struct NativeRichTextEditor {
             }
             var contextual: MarkdownShortcut.Edit?
             if replacement == "\n", range.length == 0 {
+                let insertion = paragraph.length == 0
+                    ? NSRange(location: paragraph.location, length: 0)
+                    : range
                 if role?.hasPrefix("heading:") == true {
                     contextual = .init(range: range, replacement: "\n", style: .body)
                 } else if code?.hasPrefix("block:") == true, line.trimmingCharacters(in: .whitespaces).isEmpty {
-                    contextual = .init(range: NSRange(location: paragraph.location, length: caret.location - paragraph.location), replacement: "", style: quoted ? .quote : .body)
+                    let blankCode = paragraph.length == 0
+                        ? insertion
+                        : NSRange(location: paragraph.location, length: max(0, caret.location - paragraph.location))
+                    contextual = .init(range: blankCode, replacement: "", style: quoted ? .quote : .body)
                 } else if role == "task" {
                     contextual = line.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? .init(range: range, replacement: "", style: quoted ? .quote : .body)
+                        ? .init(range: insertion, replacement: "", style: quoted ? .quote : .body)
                         : .init(range: range, replacement: "\n" + line.prefix(while: { $0 == "\t" }), style: .task)
                 } else if quoted {
                     contextual = line.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? .init(range: range, replacement: "", style: .body)
+                        ? .init(range: insertion, replacement: "", style: .body)
                         : .init(range: range, replacement: "\n", style: .quote)
                 } else if code == "inline" {
                     contextual = .init(range: range, replacement: "\n", style: .body)
@@ -1441,6 +1494,8 @@ struct NativeRichTextEditor {
                 if replacement.isEmpty, range.length > 0 {
                     prepareTypingAttributesAfterInlineDeletion(range)
                 }
+                let changed = NSRange(location: range.location, length: max(range.length, replacement.utf16.count))
+                pendingNativeEditRange = pendingNativeEditRange.map { NSUnionRange($0, changed) } ?? changed
                 return true
             }
             var attributes = textView.typingAttributes
@@ -1667,10 +1722,6 @@ struct NativeRichTextEditor {
             )
             view.undoManager?.setActionName("切换待办")
             return true
-        }
-
-        fileprivate func moveCaretBeforeTask() -> Bool {
-            false
         }
 
         private func registerUndo(text: NSAttributedString, selection: NSRange, attributes: [NSAttributedString.Key: Any]) {
@@ -1912,6 +1963,27 @@ final class ReadingMacTextView: NSTextView {
     override func accessibilityChildren() -> [Any]? {
         (super.accessibilityChildren() ?? []) + subviews.filter { $0 !== quoteDecorationView }
     }
+    override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
+        guard let storage = textStorage, let layout = layoutManager as? CodeLayoutManager else { return nil }
+        let source = storage.string as NSString
+        var actions: [NSAccessibilityCustomAction] = []
+        var location = 0
+        while location < storage.length {
+            let paragraph = source.paragraphRange(for: NSRange(location: location, length: 0))
+            if let marker = layout.taskMarkerIndex(in: paragraph) {
+                let checked = storage.attribute(.weaveTaskChecked, at: marker, effectiveRange: nil) as? Bool ?? false
+                let text = source.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = checked ? "将“\(text)”标记为未完成" : "将“\(text)”标记为已完成"
+                actions.append(NSAccessibilityCustomAction(name: name) { [weak self] in
+                    self?.toggleTask?(marker) ?? false
+                })
+            }
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+        return actions.isEmpty ? nil : actions
+    }
     override func layout() {
         super.layout()
         quoteDecorationView?.frame = bounds
@@ -2110,10 +2182,6 @@ extension NativeRichTextEditor.Coordinator: NSTextViewDelegate {
         intercept(range: affectedCharRange, replacement: replacementString)
     }
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        if selector == #selector(NSResponder.moveBackward(_:)) || selector == #selector(NSResponder.moveLeft(_:)),
-           moveCaretBeforeTask() {
-            return true
-        }
         if selector == #selector(NSResponder.deleteBackward(_:)),
            textView.string.isEmpty,
            textView.selectedRange() == NSRange(location: 0, length: 0) {
@@ -2141,7 +2209,9 @@ extension NativeRichTextEditor.Coordinator: NSTextViewDelegate {
             textView?.typingAttributes = attributes
             pendingTypingAttributesAfterInlineDeletion = nil
         }
-        publish()
+        let affected = pendingNativeEditRange
+        pendingNativeEditRange = nil
+        publish(around: affected)
     }
     func textViewDidChangeSelection(_ notification: Notification) {
         (textView as? ReadingMacTextView)?.updateEmptyQuoteBar()
@@ -2165,23 +2235,59 @@ private final class ReadingTextView: UITextView, UIGestureRecognizerDelegate {
         let source = text as NSString
         let insertion = min(selectedRange.location, source.length)
         let paragraph = source.paragraphRange(for: NSRange(location: insertion, length: 0))
-        guard selectedRange.length == 0,
-              source.substring(with: paragraph).trimmingCharacters(in: .newlines).isEmpty,
-              typingAttributes[.weaveQuote] as? Bool == true,
-              let layout = layoutManager as? CodeLayoutManager else { return }
-        if paragraph.location < textStorage.length,
-           textStorage.attribute(.weaveQuote, at: paragraph.location, effectiveRange: nil) as? Bool == true { return }
-        let font = typingAttributes[.font] as? UIFont ?? .systemFont(ofSize: DocumentTypography.bodySize)
-        UIColor.label.withAlphaComponent(0.22).setFill()
-        layout.fill(layout.emptyQuoteBarRect(at: insertion, font: font, in: textContainer).offsetBy(
-            dx: textContainerInset.left,
-            dy: textContainerInset.top
-        ), radius: 1)
+        if selectedRange.length == 0,
+           source.substring(with: paragraph).trimmingCharacters(in: .newlines).isEmpty,
+           typingAttributes[.weaveQuote] as? Bool == true,
+           paragraph.location >= textStorage.length
+                || textStorage.attribute(.weaveQuote, at: paragraph.location, effectiveRange: nil) as? Bool != true,
+           let layout = layoutManager as? CodeLayoutManager {
+            let font = typingAttributes[.font] as? UIFont ?? .systemFont(ofSize: DocumentTypography.bodySize)
+            UIColor.label.withAlphaComponent(0.22).setFill()
+            layout.fill(layout.emptyQuoteBarRect(at: insertion, font: font, in: textContainer).offsetBy(
+                dx: textContainerInset.left,
+                dy: textContainerInset.top
+            ), radius: 1)
+        }
+        if let layout = layoutManager as? CodeLayoutManager,
+           let marker = emptyTaskMarkerDrawingRect() {
+            layout.drawTaskMarker(
+                checked: typingAttributes[.weaveTaskChecked] as? Bool ?? false,
+                hovered: false,
+                in: marker
+            )
+        }
     }
     var refreshTables: (() -> Void)?
     var toggleTask: ((Int) -> Bool)?
+    var toggleEmptyTask: (() -> Bool)?
+    private func emptyTaskMarkerDrawingRect() -> CGRect? {
+        let source = text as NSString
+        let insertion = min(selectedRange.location, source.length)
+        let paragraph = source.paragraphRange(for: NSRange(location: insertion, length: 0))
+        guard selectedRange.length == 0,
+              source.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              typingAttributes[.weaveParagraphStyle] as? String == "task",
+              typingAttributes[.weaveTaskChecked] is Bool,
+              let layout = layoutManager as? CodeLayoutManager else { return nil }
+        if paragraph.location < textStorage.length, layout.taskMarkerIndex(in: paragraph) != nil { return nil }
+        let font = typingAttributes[.font] as? UIFont
+            ?? .systemFont(ofSize: DocumentTypography.bodySize * DocumentTypography.readingScale)
+        return layout.emptyTaskMarkerRect(
+            at: insertion,
+            font: font,
+            quoted: typingAttributes[.weaveQuote] as? Bool == true,
+            in: textContainer
+        ).offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
+    }
     @objc func tappedTask(_ recognizer: UITapGestureRecognizer) {
         let point = recognizer.location(in: self)
+        if let layout = layoutManager as? CodeLayoutManager,
+           let marker = emptyTaskMarkerDrawingRect(),
+           layout.taskMarkerHitRect(for: marker).contains(point) {
+            _ = toggleEmptyTask?()
+            setNeedsDisplay()
+            return
+        }
         let local = CGPoint(x: point.x - textContainerInset.left, y: point.y - textContainerInset.top)
         guard let layout = layoutManager as? CodeLayoutManager,
               let marker = layout.taskMarkerCharacter(at: local, in: textContainer) else { return }
@@ -2191,8 +2297,36 @@ private final class ReadingTextView: UITextView, UIGestureRecognizerDelegate {
         guard gestureRecognizer is UITapGestureRecognizer,
               let layout = layoutManager as? CodeLayoutManager else { return true }
         let point = touch.location(in: self)
+        if let marker = emptyTaskMarkerDrawingRect(), layout.taskMarkerHitRect(for: marker).contains(point) {
+            return true
+        }
         let local = CGPoint(x: point.x - textContainerInset.left, y: point.y - textContainerInset.top)
         return layout.taskMarkerCharacter(at: local, in: textContainer) != nil
+    }
+
+    private func refreshTaskAccessibilityActions() {
+        let source = textStorage.string as NSString
+        guard textStorage.length > 0, let layout = layoutManager as? CodeLayoutManager else {
+            accessibilityCustomActions = nil
+            return
+        }
+        var actions: [UIAccessibilityCustomAction] = []
+        var location = 0
+        while location < textStorage.length {
+            let paragraph = source.paragraphRange(for: NSRange(location: location, length: 0))
+            if let marker = layout.taskMarkerIndex(in: paragraph) {
+                let checked = textStorage.attribute(.weaveTaskChecked, at: marker, effectiveRange: nil) as? Bool ?? false
+                let text = source.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = checked ? "将“\(text)”标记为未完成" : "将“\(text)”标记为已完成"
+                actions.append(UIAccessibilityCustomAction(name: name) { [weak self] _ in
+                    self?.toggleTask?(marker) ?? false
+                })
+            }
+            let next = NSMaxRange(paragraph)
+            if next <= location { break }
+            location = next
+        }
+        accessibilityCustomActions = actions.isEmpty ? nil : actions
     }
 
     override func layoutSubviews() {
@@ -2202,6 +2336,7 @@ private final class ReadingTextView: UITextView, UIGestureRecognizerDelegate {
         }
         super.layoutSubviews()
         refreshTables?()
+        refreshTaskAccessibilityActions()
     }
 }
 
@@ -2219,6 +2354,7 @@ extension NativeRichTextEditor: UIViewRepresentable {
         view.pasteStructured = { [weak coordinator = context.coordinator] in coordinator?.pasteStructured() ?? false }
         view.refreshTables = { [weak coordinator = context.coordinator] in coordinator?.refreshTables() }
         view.toggleTask = { [weak coordinator = context.coordinator] index in coordinator?.toggleTask(at: index) ?? false }
+        view.toggleEmptyTask = { [weak coordinator = context.coordinator] in coordinator?.toggleEmptyTask() ?? false }
         let tap = UITapGestureRecognizer(target: view, action: #selector(ReadingTextView.tappedTask(_:)))
         tap.delegate = view
         tap.cancelsTouchesInView = true
@@ -2245,7 +2381,7 @@ extension NativeRichTextEditor: UIViewRepresentable {
 
 extension NativeRichTextEditor.Coordinator: UITextViewDelegate {
     func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-        intercept(range: range, replacement: text)
+        return intercept(range: range, replacement: text)
     }
     func textViewDidChange(_ textView: UITextView) {
         restoreEmptyQuoteTypingAttributesFromPreviousValue()
@@ -2253,8 +2389,13 @@ extension NativeRichTextEditor.Coordinator: UITextViewDelegate {
             textView.typingAttributes = attributes
             pendingTypingAttributesAfterInlineDeletion = nil
         }
-        publish()
+        let affected = pendingNativeEditRange
+        pendingNativeEditRange = nil
+        publish(around: affected)
     }
-    func textViewDidChangeSelection(_ textView: UITextView) { publishSelection() }
+    func textViewDidChangeSelection(_ textView: UITextView) {
+        textView.setNeedsDisplay()
+        publishSelection()
+    }
 }
 #endif

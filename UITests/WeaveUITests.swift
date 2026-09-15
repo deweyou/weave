@@ -1,6 +1,8 @@
 import XCTest
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 @MainActor
@@ -12,7 +14,24 @@ final class WeaveUITests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment["WEAVE_UI_TEST_SESSION"] = UUID().uuidString
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        #if os(macOS)
+        // Window restoration is process-global for the bundle identifier. A prior
+        // run that quit without an open window must not suppress the test window.
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        #endif
         app.launch()
+        #if os(macOS)
+        app.activate()
+        if !app.windows.firstMatch.waitForExistence(timeout: 3) {
+            // AppKit can finish terminating the previous UI-test instance after
+            // the next launch request. Relaunch once when that race leaves only
+            // the application menu and no document window.
+            app.terminate()
+            app.launch()
+            app.activate()
+        }
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
+        #endif
     }
 
     override func tearDownWithError() throws {
@@ -102,7 +121,7 @@ final class WeaveUITests: XCTestCase {
         tasks.tap()
         editor.tap()
         editor.typeText("First task")
-        expectText("☐ First task")
+        expectText("First task")
     }
 
     #if os(iOS)
@@ -120,6 +139,26 @@ final class WeaveUITests: XCTestCase {
         editor.typeText("After table")
         XCTAssertEqual(value.value as? String, "Touch edit")
         XCTAssertTrue((editor.value as? String)?.hasSuffix("After table") == true)
+    }
+
+    func testSecondReturnExitsTaskAndQuoteOnTouchEditor() {
+        newNote()
+        for character in "[] " { editor.typeText(String(character)) }
+        editor.typeText("Task")
+        editor.typeText("\n")
+        XCTAssertEqual(editor.value as? String, "Task\n", "第一次 Return 后应保留空待办；label=\(editor.label)")
+        editor.typeText("\n")
+        XCTAssertEqual(editor.value as? String, "Task\n", "第二次 Return 应退出空待办；label=\(editor.label)")
+        editor.typeText("Body")
+        expectText("Task\nBody")
+
+        editor.typeText("\n")
+        for character in "> " { editor.typeText(String(character)) }
+        editor.typeText("Quote")
+        editor.typeText("\n")
+        editor.typeText("\n")
+        editor.typeText("After quote")
+        expectText("Task\nBody\nQuote\nAfter quote")
     }
     #endif
 
@@ -143,7 +182,7 @@ final class WeaveUITests: XCTestCase {
         editor.typeText("\n")
         editor.typeText("\n")
         editor.typeText("Body")
-        expectText("☐ Task\nBody")
+        expectText("Task\nBody")
     }
 
     func testSecondReturnExitsQuoteBeforeFollowingBody() {
@@ -299,8 +338,16 @@ final class WeaveUITests: XCTestCase {
         try source.write(to: file, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: file) }
         let importer = app.buttons["import-markdown"]
-        XCTAssertTrue(importer.waitForExistence(timeout: 5))
-        importer.tap()
+        if importer.waitForExistence(timeout: 2) {
+            importer.tap()
+        } else {
+            let overflow = app.popUpButtons["更多工具栏项"]
+            XCTAssertTrue(overflow.waitForExistence(timeout: 5))
+            overflow.tap()
+            let overflowImporter = app.menuItems["导入 Markdown…"]
+            XCTAssertTrue(overflowImporter.waitForExistence(timeout: 5))
+            overflowImporter.tap()
+        }
         app.typeKey("g", modifierFlags: [.command, .shift])
         let path = app.textFields["PathTextField"]
         XCTAssertTrue(path.waitForExistence(timeout: 5))
@@ -312,7 +359,7 @@ final class WeaveUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         open.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        expectText("Imported document\nStrong and emphasis\n☑ Done\nliteral\nlet value = 1")
+        expectText("Imported document\nStrong and emphasis\nDone\nliteral\nlet value = 1")
     }
 
     func testStrikeShortcutUndoAndOrdinaryContinuation() {

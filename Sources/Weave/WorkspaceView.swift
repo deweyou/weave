@@ -129,6 +129,7 @@ private struct NoteEditorView: View {
     @State private var exportDocument = MarkdownFile(source: "")
     @State private var exportError: String?
     @State private var didCopyMarkdown = false
+    @State private var bodyFocusRequest = 0
     @Environment(\.undoManager) private var undoManager
     @Environment(\.fontResolutionContext) private var fontContext
 
@@ -148,16 +149,27 @@ private struct NoteEditorView: View {
         VStack(spacing: 0) {
             TextField("无标题", text: Binding(
                 get: { store.notes.first(where: { $0.id == note.id })?.title ?? "" },
-                set: { store.updateTitle(id: note.id, title: $0) }
+                set: { value in
+                    store.updateTitle(id: note.id, title: value)
+                    guard value.contains(where: { $0.isNewline }) else { return }
+                    isTitleFocused = false
+                    isFocused = true
+                    bodyFocusRequest &+= 1
+                }
             ), axis: .vertical)
             .font(.system(size: DocumentTypography.titleSize, weight: .semibold))
             .lineSpacing(DocumentTypography.titleLineSpacing)
             .lineLimit(1...4)
             .textFieldStyle(.plain)
+            .submitLabel(.next)
             .focused($isTitleFocused)
             .accessibilityLabel("记录标题")
             .accessibilityIdentifier("note-title")
-            .onSubmit { isTitleFocused = false; isFocused = true }
+            .onSubmit {
+                isTitleFocused = false
+                isFocused = true
+                bodyFocusRequest &+= 1
+            }
             .padding(.leading, DocumentTypography.titleLeadingInset)
             .frame(maxWidth: DocumentTypography.readingWidth)
             .padding(.horizontal, 32)
@@ -168,7 +180,7 @@ private struct NoteEditorView: View {
         NativeRichTextEditor(text: Binding(
             get: { richText },
             set: { store.updateRichText(id: note.id, text: $0) }
-        ), selection: $selection, focusWhenEmpty: false, onEditLink: {
+        ), selection: $selection, focusWhenEmpty: false, focusRequest: bodyFocusRequest, onEditLink: {
             linkAddress = selection.attributes(in: richText).compactMap { $0.link?.absoluteString }.first ?? ""
             showsLinkEditor = true
         })

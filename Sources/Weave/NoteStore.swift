@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import SwiftUI
 
-struct Note: Identifiable, Codable, Equatable {
+struct Note: Identifiable, Codable, Equatable, Sendable {
     var id: UUID
     var title: String
     var richText: AttributedString
@@ -111,6 +111,20 @@ struct Note: Identifiable, Codable, Equatable {
     }
 }
 
+private actor NotePersistenceWriter {
+    let directory: URL
+
+    init(directory: URL) {
+        self.directory = directory
+    }
+
+    func write(_ notes: [Note]) throws {
+        let encodedNotes = try JSONEncoder().encode(notes)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try encodedNotes.write(to: directory.appendingPathComponent("notes.json"), options: .atomic)
+    }
+}
+
 @MainActor
 @Observable
 final class NoteStore {
@@ -121,10 +135,15 @@ final class NoteStore {
     private(set) var hasUnsavedChanges = false
 
     private let directory: URL
+    private let writer: NotePersistenceWriter
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var saveRevision = 0
     private var notesURL: URL { directory.appendingPathComponent("notes.json") }
 
     init(directory: URL? = nil) {
-        self.directory = directory ?? URL.applicationSupportDirectory.appendingPathComponent("Weave", isDirectory: true)
+        let directory = directory ?? URL.applicationSupportDirectory.appendingPathComponent("Weave", isDirectory: true)
+        self.directory = directory
+        writer = NotePersistenceWriter(directory: directory)
         reload()
     }
 
@@ -140,7 +159,9 @@ final class NoteStore {
     }
 
     func updateTitle(id: UUID, title: String) {
-        let normalizedTitle = title.components(separatedBy: .newlines).joined(separator: " ")
+        let normalizedTitle = title.trimmingCharacters(in: .newlines)
+            .components(separatedBy: .newlines)
+            .joined(separator: " ")
         guard loadError == nil,
               let index = notes.firstIndex(where: { $0.id == id }),
               notes[index].title != normalizedTitle else { return }
@@ -178,15 +199,29 @@ final class NoteStore {
 
     func retrySave() {
         guard loadError == nil, hasUnsavedChanges else { return }
-        do {
-            let encodedNotes = try JSONEncoder().encode(notes)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try encodedNotes.write(to: notesURL, options: .atomic)
-            hasUnsavedChanges = false
-            saveError = nil
-        } catch {
-            saveError = "无法保存记录。内容仍保留在当前窗口，请重试。\n\(error.localizedDescription)"
+        saveRevision &+= 1
+        let revision = saveRevision
+        let snapshot = notes
+        saveTask?.cancel()
+        saveTask = Task { [weak self, writer] in
+            do {
+                try Task.checkCancellation()
+                try await writer.write(snapshot)
+                try Task.checkCancellation()
+                guard let self, self.saveRevision == revision else { return }
+                self.hasUnsavedChanges = false
+                self.saveError = nil
+            } catch is CancellationError {
+                // A newer snapshot owns the pending save.
+            } catch {
+                guard let self, self.saveRevision == revision else { return }
+                self.saveError = "无法保存记录。内容仍保留在当前窗口，请重试。\n\(error.localizedDescription)"
+            }
         }
+    }
+
+    func flushPendingSave() async {
+        await saveTask?.value
     }
 
     func reload() {

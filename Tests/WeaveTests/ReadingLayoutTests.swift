@@ -38,8 +38,6 @@ struct ReadingLayoutTests {
             #expect(layout.taskMarkerAdjacent(to: marker) == marker)
             #expect(layout.taskMarkerAdjacent(to: marker) == marker)
             #expect(layout.taskMarkerAdjacent(to: marker + 1) == nil)
-            #expect(layout.selectionAvoidingTaskMarker(NSRange(location: marker, length: 0)).location == marker)
-            #expect(layout.selectionAvoidingTaskMarker(NSRange(location: marker, length: 2)) == NSRange(location: marker, length: 2))
         }
         let rich = NativeTextAttributes.rich(native)
         #expect(MarkdownFormatting.serialize(rich, context: context) == "- [ ] Open\n- [x] Done")

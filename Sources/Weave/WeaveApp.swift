@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct WeaveApp: App {
     @State private var store: NoteStore
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         #if DEBUG
@@ -22,6 +23,10 @@ struct WeaveApp: App {
     var body: some Scene {
         WindowGroup {
             WorkspaceView(store: store)
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase != .active else { return }
+                    Task { await store.flushPendingSave() }
+                }
         }
         #if os(macOS)
         .defaultSize(width: 1000, height: 720)

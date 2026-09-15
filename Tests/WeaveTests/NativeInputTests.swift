@@ -137,6 +137,36 @@ struct NativeInputTests {
         return (view, coordinator)
     }
 
+    @Test func structuredCopyPreservesQuoteAndTaskSemanticsWithStandardFallbacks() throws {
+        let source = MarkdownFormatting.render("> Quoted\n\n- [x] Done")
+        let (view, coordinator) = editor(source)
+        view.setSelectedRange(NSRange(location: 0, length: view.string.utf16.count))
+
+        #expect(coordinator.copyStructured(cut: false))
+        let pasteboard = NSPasteboard.general
+        let encoded = try #require(pasteboard.data(forType: .init("app.weave.richtext")))
+        let copied = try RichTextClipboard.decode(encoded)
+        #expect(copied.runs.contains { $0[QuoteAttribute.self] == true })
+        #expect(copied.runs.contains { $0[TaskStateAttribute.self] == true })
+        #expect(pasteboard.data(forType: .rtf) != nil)
+        #expect(pasteboard.string(forType: .string) == "Quoted\nDone")
+    }
+
+    @Test func taskCheckboxExposesAnAccessibleToggleAction() throws {
+        let source = MarkdownFormatting.render("- [ ] Accessible task")
+        let native = NativeTextAttributes.native(source, context: EnvironmentValues().fontResolutionContext)
+        let view = ReadingMacTextView()
+        view.textContainer?.replaceLayoutManager(CodeLayoutManager())
+        view.textStorage?.setAttributedString(native)
+        var toggledMarker: Int?
+        view.toggleTask = { marker in toggledMarker = marker; return true }
+
+        let action = try #require(view.accessibilityCustomActions()?.first)
+        #expect(action.name == "将“Accessible task”标记为已完成")
+        #expect(action.handler?() == true)
+        #expect(toggledMarker == 0)
+    }
+
     @Test func selectingBlankParagraphKeepsItsLayoutAndTypingMetrics() throws {
         let source = MarkdownFormatting.render("## Heading\n\n\nBody")
         let (view, coordinator) = editor(source)
