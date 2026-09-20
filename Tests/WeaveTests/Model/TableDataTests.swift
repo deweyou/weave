@@ -1,5 +1,6 @@
 import SwiftUI
 import Testing
+
 @testable import Weave
 
 struct TableDataTests {
@@ -37,7 +38,9 @@ struct TableDataTests {
         let restored = NativeTextAttributes.rich(native)
         let table = try #require(restored.runs.compactMap { $0[TableAttribute.self] }.first)
         #expect(table.rows == [["Key", "Value"], ["Alpha", "42"]])
-        #expect(MarkdownFormatting.serialize(restored, context: context) == source.replacingOccurrences(of: "Before\n", with: "Before\n\n").replacingOccurrences(of: "\nAfter", with: "\n\nAfter"))
+        #expect(
+            MarkdownFormatting.serialize(restored, context: context)
+                == source.replacingOccurrences(of: "Before\n", with: "Before\n\n").replacingOccurrences(of: "\nAfter", with: "\n\nAfter"))
     }
 
     @Test func tableContentParticipatesInSearchProjectionAndPersistence() throws {

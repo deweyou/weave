@@ -1,5 +1,5 @@
-import SwiftUI
 import CoreText
+import SwiftUI
 
 enum ParagraphStyleAttribute: CodableAttributedStringKey {
     typealias Value = String
@@ -30,11 +30,11 @@ enum DocumentTypography {
     static let titleLineSpacing = titleSize * (3 / 28)
     static let mobileScale: CGFloat = 1.08
     #if os(macOS)
-    static let storedBodySize: CGFloat = 13
-    static let readingScale = bodySize / storedBodySize
+        static let storedBodySize: CGFloat = 13
+        static let readingScale = bodySize / storedBodySize
     #else
-    static let storedBodySize: CGFloat = 17
-    static let readingScale = mobileScale
+        static let storedBodySize: CGFloat = 17
+        static let readingScale = mobileScale
     #endif
     static let bodyLineSpacing: CGFloat = 6
     static let bodyParagraphSpacing: CGFloat = 8
@@ -69,18 +69,18 @@ enum DocumentTypography {
     static let taskCheckScale: CGFloat = 0.66
     static let taskCheckHorizontalOffsetRatio: CGFloat = 0.04
     #if os(macOS)
-    static let taskIconHitSize: CGFloat = 24
+        static let taskIconHitSize: CGFloat = 24
     #else
-    static let taskIconHitSize: CGFloat = 44
+        static let taskIconHitSize: CGFloat = 44
     #endif
     static let codeBefore: CGFloat = 12
     static let codeAfter: CGFloat = 14
     static let tableRowHeight: CGFloat = 44
     static let tableControlsHeight: CGFloat = 32
     #if os(macOS)
-    static let codeHeaderHeight: CGFloat = 32
+        static let codeHeaderHeight: CGFloat = 32
     #else
-    static let codeHeaderHeight: CGFloat = 44
+        static let codeHeaderHeight: CGFloat = 44
     #endif
 
     struct Heading {
@@ -96,19 +96,27 @@ enum DocumentTypography {
         .init(ratio: 17 / 14, weight: .semibold, lineSpacing: 3, before: 10, after: 4),
         .init(ratio: 15 / 14, weight: .semibold, lineSpacing: 3, before: 10, after: 4),
         .init(ratio: 1, weight: .semibold, lineSpacing: 3, before: 8, after: 4),
-        .init(ratio: 1, weight: .medium, lineSpacing: 3, before: 6, after: 2)
+        .init(ratio: 1, weight: .medium, lineSpacing: 3, before: 6, after: 2),
     ]
     static func heading(for role: String) -> Heading? {
         guard role.hasPrefix("heading:"), let level = Int(role.dropFirst(8)), (1...6).contains(level) else { return nil }
         return headings[level - 1]
     }
-    static func font(for role: String, emphasis: Int = 0, inlineCode: Bool = false, context: Font.Context = EnvironmentValues().fontResolutionContext) -> Font {
+    static func font(
+        for role: String, emphasis: Int = 0, inlineCode: Bool = false, context: Font.Context = EnvironmentValues().fontResolutionContext
+    ) -> Font {
         var font: Font
-        if inlineCode { font = .system(size: CTFontGetSize(Font.body.resolve(in: context).ctFont) * (heading(for: role)?.ratio ?? 1) * inlineCodeScale, design: .monospaced) }
-        else if role == "code" { font = .body.monospaced() }
-        else if let heading = heading(for: role) {
+        if inlineCode {
+            font = .system(
+                size: CTFontGetSize(Font.body.resolve(in: context).ctFont) * (heading(for: role)?.ratio ?? 1) * inlineCodeScale,
+                design: .monospaced)
+        } else if role == "code" {
+            font = .body.monospaced()
+        } else if let heading = heading(for: role) {
             font = .system(size: CTFontGetSize(Font.body.resolve(in: context).ctFont) * heading.ratio, weight: heading.weight)
-        } else { font = .body }
+        } else {
+            font = .body
+        }
         if emphasis & 1 != 0 {
             font = heading(for: role) == nil ? font.bold() : font.weight(.bold)
         }
@@ -138,8 +146,9 @@ enum DocumentTypography {
         let current = emphasis(in: attributes, context: context)
         let flags = enabled ? current | flag : current & ~flag
         attributes[InlineEmphasisAttribute.self] = flags
-        attributes.font = font(for: attributes[ParagraphStyleAttribute.self] ?? "body", emphasis: flags,
-                               inlineCode: attributes[CodeStyleAttribute.self] == "inline", context: context)
+        attributes.font = font(
+            for: attributes[ParagraphStyleAttribute.self] ?? "body", emphasis: flags,
+            inlineCode: attributes[CodeStyleAttribute.self] == "inline", context: context)
     }
 }
 
@@ -157,7 +166,10 @@ enum ParagraphEditing {
         return Range<AttributedString.Index>(source.paragraphRange(for: nsRange), in: text)
     }
 
-    static func apply(_ style: String, to text: inout AttributedString, selection: inout AttributedTextSelection, context: Font.Context = EnvironmentValues().fontResolutionContext) {
+    static func apply(
+        _ style: String, to text: inout AttributedString, selection: inout AttributedTextSelection,
+        context: Font.Context = EnvironmentValues().fontResolutionContext
+    ) {
         let originalSelection: NSRange
         let selectionWasInsertionPoint: Bool
         switch selection.indices(in: text) {
@@ -172,7 +184,9 @@ enum ParagraphEditing {
         let isEmptyEnd: Bool
         if case .insertionPoint(let caret) = selection.indices(in: text) {
             isEmptyEnd = caret == text.endIndex && (text.characters.isEmpty || text.characters.last == "\n")
-        } else { isEmptyEnd = false }
+        } else {
+            isEmptyEnd = false
+        }
         guard !isEmptyEnd, let range = paragraphRange(in: text, selection: selection) else {
             var attributes = selection.typingAttributes(in: text)
             attributes[TableAttribute.self] = nil
@@ -180,7 +194,8 @@ enum ParagraphEditing {
             if style == "quote" {
                 attributes[QuoteAttribute.self] = true
                 let role = attributes[ParagraphStyleAttribute.self] ?? "body"
-                attributes.font = DocumentTypography.font(for: role,
+                attributes.font = DocumentTypography.font(
+                    for: role,
                     emphasis: DocumentTypography.emphasis(in: attributes, context: context), context: context)
                 selection = AttributedTextSelection(insertionPoint: text.endIndex, typingAttributes: attributes)
                 return
@@ -224,7 +239,9 @@ enum ParagraphEditing {
             default: marker = ""
             }
             prefixEdits.append((paragraph.location, oldPrefix.utf16.count, marker.utf16.count))
-            if let prefixRange = Range<AttributedString.Index>(NSRange(location: paragraph.location, length: oldPrefix.utf16.count), in: content) {
+            if let prefixRange = Range<AttributedString.Index>(
+                NSRange(location: paragraph.location, length: oldPrefix.utf16.count), in: content)
+            {
                 content.replaceSubrange(prefixRange, with: AttributedString(marker))
             }
         }
@@ -258,7 +275,8 @@ enum ParagraphEditing {
         let start = mappedOffset(originalSelection.location)
         let end = mappedOffset(NSMaxRange(originalSelection))
         if let restored = Range<AttributedString.Index>(NSRange(location: start, length: max(0, end - start)), in: text) {
-            selection = selectionWasInsertionPoint || restored.isEmpty
+            selection =
+                selectionWasInsertionPoint || restored.isEmpty
                 ? AttributedTextSelection(insertionPoint: restored.lowerBound)
                 : AttributedTextSelection(range: restored)
         }
@@ -285,8 +303,9 @@ enum ParagraphEditing {
             let depth = line.prefix(while: { $0 == "\t" }).count
             let paragraphRole = Range<AttributedString.Index>(paragraph, in: text)
                 .flatMap { text[$0].runs.first?[ParagraphStyleAttribute.self] }
-            if (MarkdownShortcut.listPrefix(line)?.style != .quote && MarkdownShortcut.listPrefix(line) != nil || paragraphRole == "task"),
-               outdent ? depth > 0 : depth < 8 {
+            if MarkdownShortcut.listPrefix(line)?.style != .quote && MarkdownShortcut.listPrefix(line) != nil || paragraphRole == "task",
+                outdent ? depth > 0 : depth < 8
+            {
                 edits.append(NSRange(location: location, length: outdent ? 1 : 0))
             }
             location = NSMaxRange(paragraph)
@@ -300,11 +319,14 @@ enum ParagraphEditing {
             if edit.location <= end { end = max(edit.location, end + delta) }
         }
         if let restored = Range<AttributedString.Index>(NSRange(location: start, length: max(0, end - start)), in: text) {
-            selection = restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
+            selection =
+                restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
         }
     }
 
-    static func font(for style: String, context: Font.Context = EnvironmentValues().fontResolutionContext) -> Font { DocumentTypography.font(for: style, context: context) }
+    static func font(for style: String, context: Font.Context = EnvironmentValues().fontResolutionContext) -> Font {
+        DocumentTypography.font(for: style, context: context)
+    }
 
     /// Read-time migration uses explicit old semantic fonts, never displayed sizes.
     static func migrateLegacyAttributes(_ text: inout AttributedString, context: Font.Context = EnvironmentValues().fontResolutionContext) {
@@ -321,7 +343,8 @@ enum ParagraphEditing {
         }
         for paragraph in paragraphRanges().reversed() {
             guard let range = Range<AttributedString.Index>(paragraph, in: text),
-                  text[range].runs.first?[ParagraphStyleAttribute.self] == "quote" else { continue }
+                text[range].runs.first?[ParagraphStyleAttribute.self] == "quote"
+            else { continue }
             text[range][QuoteAttribute.self] = true
             text[range][ParagraphStyleAttribute.self] = "body"
             let line = String(text[range].characters)
@@ -333,11 +356,13 @@ enum ParagraphEditing {
         }
         for paragraph in paragraphRanges().reversed() {
             guard let range = Range<AttributedString.Index>(paragraph, in: text),
-                  text[range].runs.first?[ParagraphStyleAttribute.self] == "task" else { continue }
+                text[range].runs.first?[ParagraphStyleAttribute.self] == "task"
+            else { continue }
             let line = String(text[range].characters)
             let indentation = line.prefix(while: { $0 == "\t" }).count
             let markerStart = text.characters.index(range.lowerBound, offsetBy: indentation)
-            let markerEnd = text.characters.index(markerStart, offsetBy: min(2, text.characters.distance(from: markerStart, to: range.upperBound)))
+            let markerEnd = text.characters.index(
+                markerStart, offsetBy: min(2, text.characters.distance(from: markerStart, to: range.upperBound)))
             let marker = String(text[markerStart..<markerEnd].characters)
             guard marker == "☐ " || marker == "☑ " else { continue }
             let checked = marker.hasPrefix("☑")
@@ -345,7 +370,9 @@ enum ParagraphEditing {
             let migratedSource = String(text.characters) as NSString
             let anchor = min(paragraph.location, max(0, migratedSource.length - 1))
             guard migratedSource.length > 0,
-                  let migratedRange = Range<AttributedString.Index>(migratedSource.paragraphRange(for: NSRange(location: anchor, length: 0)), in: text) else { continue }
+                let migratedRange = Range<AttributedString.Index>(
+                    migratedSource.paragraphRange(for: NSRange(location: anchor, length: 0)), in: text)
+            else { continue }
             text[migratedRange][TaskStateAttribute.self] = checked
         }
         let source = String(text.characters) as NSString
@@ -353,17 +380,25 @@ enum ParagraphEditing {
         while location < source.length {
             let paragraph = source.paragraphRange(for: NSRange(location: location, length: 0))
             if let range = Range<AttributedString.Index>(paragraph, in: text), let first = text[range].runs.first,
-               first[ParagraphStyleAttribute.self] == nil {
+                first[ParagraphStyleAttribute.self] == nil
+            {
                 let role: String
-                if first.font == .title { role = "heading:1" }
-                else if first.font == .title2 { role = "heading:2" }
-                else if first.font == .title3 { role = "heading:3" }
-                else { location = NSMaxRange(paragraph); continue }
+                if first.font == .title {
+                    role = "heading:1"
+                } else if first.font == .title2 {
+                    role = "heading:2"
+                } else if first.font == .title3 {
+                    role = "heading:3"
+                } else {
+                    location = NSMaxRange(paragraph)
+                    continue
+                }
                 text[range][ParagraphStyleAttribute.self] = role
             }
             location = NSMaxRange(paragraph)
         }
-        for run in Array(text.runs) where run[InlineEmphasisAttribute.self] == nil && run[ParagraphStyleAttribute.self]?.hasPrefix("heading:") == true {
+        for run in Array(text.runs)
+        where run[InlineEmphasisAttribute.self] == nil && run[ParagraphStyleAttribute.self]?.hasPrefix("heading:") == true {
             text[run.range][InlineEmphasisAttribute.self] = DocumentTypography.emphasis(in: run.attributes, context: context)
         }
     }
@@ -381,7 +416,8 @@ enum ParagraphEditing {
         let checked = text[range].runs.first?[TaskStateAttribute.self] ?? false
         text[range][TaskStateAttribute.self] = !checked
         if let restored = Range<AttributedString.Index>(selected, in: text) {
-            selection = restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
+            selection =
+                restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
         }
     }
 }

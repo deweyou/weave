@@ -1,5 +1,6 @@
 import SwiftUI
 import Testing
+
 @testable import Weave
 
 struct MarkdownFormattingTests {
@@ -19,7 +20,7 @@ struct MarkdownFormattingTests {
             ("First\n\n\nSecond", "First\n\nSecond"),
             ("# Heading\n\nBody", "Heading\nBody"),
             ("First\nsecond\n\nThird", "First\u{2028}second\nThird"),
-            ("\nFirst\n\n", "\nFirst\n\n")
+            ("\nFirst\n\n", "\nFirst\n\n"),
         ] {
             var text = MarkdownFormatting.render(source)
             #expect(String(text.characters) == expected)
@@ -96,7 +97,8 @@ struct MarkdownFormattingTests {
 
 extension MarkdownFormattingTests {
     @MainActor @Test func roundTripsSupportedStylesAndIndentation() {
-        let source = "# Title\n###### Small\n**bold** *italic* ~~removed~~ [Link](https://example.com) `x * y`\n- item\n\t- [x] done\n12. numbered\n> quote"
+        let source =
+            "# Title\n###### Small\n**bold** *italic* ~~removed~~ [Link](https://example.com) `x * y`\n- item\n\t- [x] done\n12. numbered\n> quote"
         let first = MarkdownFormatting.render(source)
         let exported = MarkdownFormatting.serialize(first, context: EnvironmentValues().fontResolutionContext)
         let second = MarkdownFormatting.render(exported)

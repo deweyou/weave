@@ -13,7 +13,9 @@ enum MarkdownFormatting {
                     literal = ""
                 }
                 result += AttributedString(text[run.range])
-            } else { literal += String(text[run.range].characters) }
+            } else {
+                literal += String(text[run.range].characters)
+            }
         }
         if !literal.isEmpty { result += render(literal) }
         return result
@@ -28,12 +30,13 @@ enum MarkdownFormatting {
             let original = lines[index]
             let outer = quoteContent(original)
             if let fence = openingFence(outer.content),
-               let closing = lines.indices.dropFirst(index + 1).first(where: {
-                   let candidate = quoteContent(lines[$0])
-                   return candidate.quoted == outer.quoted && closesFence(candidate.content, fence: fence)
-               }),
-               closing > index + 1,
-               !outer.quoted || (index...closing).allSatisfy({ quoteContent(lines[$0]).quoted }) {
+                let closing = lines.indices.dropFirst(index + 1).first(where: {
+                    let candidate = quoteContent(lines[$0])
+                    return candidate.quoted == outer.quoted && closesFence(candidate.content, fence: fence)
+                }),
+                closing > index + 1,
+                !outer.quoted || (index...closing).allSatisfy({ quoteContent(lines[$0]).quoted })
+            {
                 let codeID = "block:" + UUID().uuidString
                 let literal = lines[(index + 1)..<closing].map { line in
                     outer.quoted ? quoteContent(line).content : line
@@ -50,7 +53,8 @@ enum MarkdownFormatting {
             }
             let tableLines = outer.quoted ? lines.map { quoteContent($0).content } : lines
             if let parsed = TableData.parse(lines: tableLines, at: index),
-               !outer.quoted || (index..<(index + parsed.count)).allSatisfy({ quoteContent(lines[$0]).quoted }) {
+                !outer.quoted || (index..<(index + parsed.count)).allSatisfy({ quoteContent(lines[$0]).quoted })
+            {
                 var table = parsed.table.attributedText
                 table[QuoteAttribute.self] = outer.quoted ? true : nil
                 paragraphs.append(table)
@@ -64,7 +68,8 @@ enum MarkdownFormatting {
             var taskChecked: Bool?
             let indentation = String(content.prefix(while: { $0 == " " || $0 == "\t" }))
             let unindented = String(content.dropFirst(indentation.count))
-            let listIndentation = String(repeating: "\t", count: indentation.filter { $0 == "\t" }.count + (indentation.filter { $0 == " " }.count + 3) / 4)
+            let listIndentation = String(
+                repeating: "\t", count: indentation.filter { $0 == "\t" }.count + (indentation.filter { $0 == " " }.count + 3) / 4)
             let hashes = content.prefix(while: { $0 == "#" }).count
             if (1...6).contains(hashes), content.dropFirst(hashes).hasPrefix(" ") {
                 style = "heading:\(hashes)"
@@ -84,8 +89,9 @@ enum MarkdownFormatting {
                 style = "numbered"
             }
             // Markdown hard breaks are represented by U+2028 inside a native paragraph.
-            if index + 1 < lines.count, (!lines[index + 1].isEmpty || index + 1 == lines.count - 1),
-               content.hasSuffix("  ") {
+            if index + 1 < lines.count, !lines[index + 1].isEmpty || index + 1 == lines.count - 1,
+                content.hasSuffix("  ")
+            {
                 hardBreaks.insert(paragraphs.count)
                 content.removeLast(2)
             }
@@ -136,14 +142,19 @@ enum MarkdownFormatting {
         var paragraphs: [AttributedString] = []
         for (index, line) in lines.enumerated() {
             if line.characters.isEmpty, !hardBreaks.contains(index), !hardBreaks.contains(index - 1),
-               let first, let last, index > first, index < last,
-               !lines[index - 1].characters.isEmpty { continue }
-            let continuesBody = index > 0 && !line.characters.isEmpty && !lines[index - 1].characters.isEmpty
+                let first, let last, index > first, index < last,
+                !lines[index - 1].characters.isEmpty
+            {
+                continue
+            }
+            let continuesBody =
+                index > 0 && !line.characters.isEmpty && !lines[index - 1].characters.isEmpty
                 && line.runs.first?[ParagraphStyleAttribute.self] == "body"
                 && lines[index - 1].runs.first?[ParagraphStyleAttribute.self] == "body"
                 && line.runs.first?[QuoteAttribute.self] != true
                 && lines[index - 1].runs.first?[QuoteAttribute.self] != true
-            let continuesHardBreak = index > 0 && hardBreaks.contains(index - 1)
+            let continuesHardBreak =
+                index > 0 && hardBreaks.contains(index - 1)
                 && (line.characters.isEmpty || line.runs.first?[ParagraphStyleAttribute.self] == "body")
             if continuesBody || continuesHardBreak {
                 let role = paragraphs.last?.runs.first?[ParagraphStyleAttribute.self] ?? "body"
@@ -156,12 +167,15 @@ enum MarkdownFormatting {
                 for run in Array(continuation.runs) {
                     continuation[run.range][ParagraphStyleAttribute.self] = role
                     continuation[run.range][QuoteAttribute.self] = paragraphs.last?.runs.first?[QuoteAttribute.self]
-                    continuation[run.range].font = DocumentTypography.font(for: role,
+                    continuation[run.range].font = DocumentTypography.font(
+                        for: role,
                         emphasis: run[InlineEmphasisAttribute.self] ?? 0,
                         inlineCode: run[CodeStyleAttribute.self] == "inline")
                 }
                 paragraphs[paragraphs.count - 1] += lineBreak + continuation
-            } else { paragraphs.append(line) }
+            } else {
+                paragraphs.append(line)
+            }
         }
         return paragraphs
     }
@@ -175,9 +189,12 @@ enum MarkdownFormatting {
         let paragraphs = source.components(separatedBy: "\n").map { line -> AttributedString in
             let start = text.characters.index(text.startIndex, offsetBy: offset)
             let end = text.characters.index(start, offsetBy: line.count)
-            roles.append(start < text.endIndex ? text[start..<text.characters.index(after: start)].runs.first?[CodeStyleAttribute.self] : nil)
-            languages.append(start < text.endIndex ? text[start..<text.characters.index(after: start)].runs.first?[CodeLanguageAttribute.self] : nil)
-            quotes.append(start < text.endIndex ? text[start..<text.characters.index(after: start)].runs.first?[QuoteAttribute.self] == true : false)
+            roles.append(
+                start < text.endIndex ? text[start..<text.characters.index(after: start)].runs.first?[CodeStyleAttribute.self] : nil)
+            languages.append(
+                start < text.endIndex ? text[start..<text.characters.index(after: start)].runs.first?[CodeLanguageAttribute.self] : nil)
+            quotes.append(
+                start < text.endIndex ? text[start..<text.characters.index(after: start)].runs.first?[QuoteAttribute.self] == true : false)
             offset += line.count + 1
             return AttributedString(text[start..<end])
         }
@@ -200,7 +217,8 @@ enum MarkdownFormatting {
                 var code = [String(paragraph.characters)]
                 index += 1
                 while index < paragraphs.count,
-                      roles[index] == role {
+                    roles[index] == role
+                {
                     code.append(String(paragraphs[index].characters))
                     index += 1
                 }
@@ -228,12 +246,15 @@ enum MarkdownFormatting {
             } else if body.hasPrefix("• ") || body.hasPrefix("☐ ") || body.hasPrefix("☑ ") {
                 prefix = indentation + (body.hasPrefix("• ") ? "- " : body.hasPrefix("☐ ") ? "- [ ] " : "- [x] ")
                 skip = indentation.count + 2
-            } else if (style == "numbered" || paragraph.runs.first?[ParagraphStyleAttribute.self] == "body"), let range = body.range(of: #"^\d+[.)] "#, options: .regularExpression) {
+            } else if style == "numbered" || paragraph.runs.first?[ParagraphStyleAttribute.self] == "body",
+                let range = body.range(of: #"^\d+[.)] "#, options: .regularExpression)
+            {
                 prefix = indentation + String(body[range])
                 skip = prefix.count
             }
             let start = paragraph.characters.index(paragraph.startIndex, offsetBy: skip)
-            output.append((quoted ? "> " : "") + prefix + serializeInline(AttributedString(paragraph[start...]), style: style, context: context))
+            output.append(
+                (quoted ? "> " : "") + prefix + serializeInline(AttributedString(paragraph[start...]), style: style, context: context))
             outputStyles.append(quoted ? "quote" : prefix.hasSuffix("- ") || prefix.contains("- [") ? "list" : style)
             index += 1
         }
@@ -245,7 +266,8 @@ enum MarkdownFormatting {
                 let previous = output[index - 1]
                 if !previous.isEmpty, !paragraph.isEmpty {
                     let style = outputStyles[index]
-                    let sameList = ["list", "bullet", "task", "numbered", "quote"].contains(style)
+                    let sameList =
+                        ["list", "bullet", "task", "numbered", "quote"].contains(style)
                         && style == outputStyles[index - 1]
                     if !sameList { markdown += "\n" }
                 } else if !previous.isEmpty, paragraph.isEmpty, index < lastContent {
@@ -289,7 +311,9 @@ enum MarkdownFormatting {
             var content: String
             if intent.contains(.code) {
                 let delimiter = String(repeating: "`", count: longestBacktickRun(literal) + 1)
-                let pad = literal.hasPrefix("`") || literal.hasSuffix("`") || (literal.hasPrefix(" ") && literal.hasSuffix(" ") && !literal.allSatisfy({ $0 == " " }))
+                let pad =
+                    literal.hasPrefix("`") || literal.hasSuffix("`")
+                    || (literal.hasPrefix(" ") && literal.hasSuffix(" ") && !literal.allSatisfy({ $0 == " " }))
                 content = delimiter + (pad ? " " : "") + literal + (pad ? " " : "") + delimiter
             } else {
                 let leading = String(literal.prefix(while: { $0.isWhitespace }))
@@ -304,7 +328,8 @@ enum MarkdownFormatting {
                 content = leading + content + trailing
             }
             if let link = run.link {
-                let destination = link.absoluteString.replacingOccurrences(of: "(", with: "%28").replacingOccurrences(of: ")", with: "%29").replacingOccurrences(of: " ", with: "%20")
+                let destination = link.absoluteString.replacingOccurrences(of: "(", with: "%28").replacingOccurrences(of: ")", with: "%29")
+                    .replacingOccurrences(of: " ", with: "%20")
                 content = "[" + content + "](" + destination + ")"
             }
             return content
@@ -373,7 +398,8 @@ enum MarkdownFormatting {
                 }
             }
             if source[index...].hasPrefix("!["),
-               let ending = source[index...].firstIndex(of: "]") {
+                let ending = source[index...].firstIndex(of: "]")
+            {
                 let end = source.index(after: ending)
                 result += escape(String(source[index..<end]))
                 index = end
@@ -389,7 +415,9 @@ enum MarkdownFormatting {
     private static func inline(_ source: String, baseFont: Font) -> AttributedString {
         // Images are not part of the text data model. Keep their complete syntax visible.
         let safeSource = preservingUnsupportedSyntax(source)
-        var text = (try? AttributedString(markdown: safeSource, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(source)
+        var text =
+            (try? AttributedString(markdown: safeSource, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(source)
         for run in text.runs {
             let intent = run.inlinePresentationIntent ?? []
             var font = baseFont
@@ -400,7 +428,8 @@ enum MarkdownFormatting {
                 text[run.range][CodeStyleAttribute.self] = "inline"
             }
             text[run.range].font = font
-            text[run.range][InlineEmphasisAttribute.self] = (intent.contains(.stronglyEmphasized) ? 1 : 0) | (intent.contains(.emphasized) ? 2 : 0)
+            text[run.range][InlineEmphasisAttribute.self] =
+                (intent.contains(.stronglyEmphasized) ? 1 : 0) | (intent.contains(.emphasized) ? 2 : 0)
             if intent.contains(.strikethrough) { text[run.range].strikethroughStyle = .single }
         }
         // Foundation can omit presentation intents inside a link label. Recover them
@@ -412,7 +441,8 @@ enum MarkdownFormatting {
                 let label = inline(labelSource, baseFont: baseFont)
                 let labelString = String(label.characters)
                 let destination = nsSource.substring(with: match.range(at: 2))
-                for run in Array(text.runs) where run.link?.absoluteString == destination && String(text[run.range].characters) == labelString {
+                for run in Array(text.runs)
+                where run.link?.absoluteString == destination && String(text[run.range].characters) == labelString {
                     var replacement = label
                     replacement.link = run.link
                     text.replaceSubrange(run.range, with: replacement)

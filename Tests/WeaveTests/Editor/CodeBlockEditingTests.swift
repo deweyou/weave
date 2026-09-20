@@ -1,5 +1,6 @@
 import SwiftUI
 import Testing
+
 @testable import Weave
 
 struct CodeBlockEditingTests {
@@ -28,8 +29,11 @@ struct CodeBlockEditingTests {
         #expect(text[CodeLanguageAttribute.self] == "custom-lang")
         #expect(selection.typingAttributes(in: text)[CodeLanguageAttribute.self] == "custom-lang")
         #expect(String(text.characters) == "🌊\nprint(1)")
-        if case .insertionPoint(let caret) = selection.indices(in: text) { #expect(caret == text.endIndex) }
-        else { Issue.record("Caret should remain collapsed") }
+        if case .insertionPoint(let caret) = selection.indices(in: text) {
+            #expect(caret == text.endIndex)
+        } else {
+            Issue.record("Caret should remain collapsed")
+        }
         #expect(CodeBlockEditing.languageTag(from: "```swift linenums") == "swift")
         #expect(CodeBlockEditing.languageTag(from: "~~~unknown") == "unknown")
         #expect(CodeBlockEditing.languageTag(from: "```") == "")
@@ -62,8 +66,11 @@ struct CodeBlockEditingTests {
         #expect(String(text.characters) == "let wave = 1\n    ")
         #expect(text[CodeStyleAttribute.self] == "block:sample")
         #expect(text[CodeLanguageAttribute.self] == "swift")
-        if case .insertionPoint(let caret) = selection.indices(in: text) { #expect(caret == text.endIndex) }
-        else { Issue.record("Caret should follow indentation") }
+        if case .insertionPoint(let caret) = selection.indices(in: text) {
+            #expect(caret == text.endIndex)
+        } else {
+            Issue.record("Caret should follow indentation")
+        }
         CodeBlockEditing.indent(in: &text, selection: &selection, outdent: true)
         #expect(String(text.characters) == "let wave = 1\n")
     }
@@ -90,14 +97,26 @@ struct CodeBlockEditingTests {
 
     @Test func supportedLanguagesAndAliasesRecognizeTheirSyntax() {
         for language in ["javascript", "js", "typescript", "ts"] {
-            #expect(CodeBlockEditing.tokens(source: "const x = `if 1`; /* let 4 */", language: language).map(\.kind) == [.keyword, .string, .comment])
+            #expect(
+                CodeBlockEditing.tokens(source: "const x = `if 1`; /* let 4 */", language: language).map(\.kind) == [
+                    .keyword, .string, .comment,
+                ])
         }
         for language in ["python", "py"] {
-            #expect(CodeBlockEditing.tokens(source: "def x(): # return 1\n  return '''if 3'''", language: language).map(\.kind) == [.keyword, .comment, .keyword, .string])
+            #expect(
+                CodeBlockEditing.tokens(source: "def x(): # return 1\n  return '''if 3'''", language: language).map(\.kind) == [
+                    .keyword, .comment, .keyword, .string,
+                ])
         }
-        #expect(CodeBlockEditing.tokens(source: "{\"null\": true, \"n\": 1.5e2}", language: "json").map(\.kind) == [.string, .keyword, .string, .number])
+        #expect(
+            CodeBlockEditing.tokens(source: "{\"null\": true, \"n\": 1.5e2}", language: "json").map(\.kind) == [
+                .string, .keyword, .string, .number,
+            ])
         for language in ["shell", "sh", "bash", "zsh"] {
-            #expect(CodeBlockEditing.tokens(source: "if true; then # comment", language: language).map(\.kind) == [.keyword, .keyword, .comment])
+            #expect(
+                CodeBlockEditing.tokens(source: "if true; then # comment", language: language).map(\.kind) == [
+                    .keyword, .keyword, .comment,
+                ])
         }
         #expect(CodeBlockEditing.tokens(source: "let x = \"unterminated if", language: "swift").map(\.kind) == [.keyword, .string])
         #expect(CodeBlockEditing.tokens(source: "/* unterminated let", language: "swift").map(\.kind) == [.comment])

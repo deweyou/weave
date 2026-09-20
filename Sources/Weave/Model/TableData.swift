@@ -21,8 +21,10 @@ struct TableData: Codable, Hashable, Sendable, Identifiable {
         rows = try container.decode([[String]].self, forKey: .rows)
         alignments = try container.decode([TableAlignment].self, forKey: .alignments)
         guard !rows.isEmpty, !alignments.isEmpty,
-              rows.allSatisfy({ $0.count == alignments.count }) else {
-            throw DecodingError.dataCorruptedError(forKey: .rows, in: container, debugDescription: "Table rows must match the column count.")
+            rows.allSatisfy({ $0.count == alignments.count })
+        else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .rows, in: container, debugDescription: "Table rows must match the column count.")
         }
     }
 
@@ -67,8 +69,9 @@ struct TableData: Codable, Hashable, Sendable, Identifiable {
     /// Only consumes a table when the delimiter row exactly matches its header.
     static func parse(lines: [String], at start: Int) -> (table: TableData, count: Int)? {
         guard start + 1 < lines.count, lines[start].contains("|"),
-              let header = splitRow(lines[start]), let delimiters = splitRow(lines[start + 1]),
-              header.count == delimiters.count else { return nil }
+            let header = splitRow(lines[start]), let delimiters = splitRow(lines[start + 1]),
+            header.count == delimiters.count
+        else { return nil }
         var alignments: [TableAlignment] = []
         for delimiter in delimiters {
             guard delimiter.range(of: #"^:?-{3,}:?$"#, options: .regularExpression) != nil else { return nil }
@@ -94,9 +97,14 @@ struct TableData: Codable, Hashable, Sendable, Identifiable {
                 if character != "|" && character != "\\" { cell.append("\\") }
                 cell.append(character)
                 escaped = false
-            } else if character == "\\" { escaped = true }
-            else if character == "|" { cells.append(cell); cell = "" }
-            else { cell.append(character) }
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "|" {
+                cells.append(cell)
+                cell = ""
+            } else {
+                cell.append(character)
+            }
         }
         if escaped { cell.append("\\") }
         cells.append(cell)

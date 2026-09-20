@@ -6,20 +6,28 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| `Sources/Weave/WeaveApp.swift` | 生命周期、存储实例、Mac 新建命令 |
-| `Sources/Weave/WorkspaceView.swift` | 分栏、列表与搜索、格式工具条与菜单、链接表单、Markdown 文件面板、错误状态 |
-| `Sources/Weave/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、字体映射、选区与输入属性、快捷输入接入、原生背景绘制 |
-| `Sources/Weave/ParagraphEditing.swift` | `DocumentTypography` 排版配置、独立行内强调、整段格式操作、旧语义字体迁移、待办标记切换 |
-| `Sources/Weave/MarkdownShortcut.swift` | 单次输入触发的局部转换规则，UTF-16 范围 |
-| `Sources/Weave/MarkdownFormatting.swift` | 常用 Markdown 导入与语义导出，非全部富文本的无损编解码器 |
-| `Sources/Weave/TableData.swift` | 表格 Codable 模型、行列操作、Markdown 表格交换与纯文本投影 |
-| `Sources/Weave/NativeTableView.swift` | 表格附件尺寸、原位单元格控件与行列菜单 |
-| `Sources/Weave/NativeTableOverlay.swift` | 表格控件与代码块工具栏随原生文本布局定位、复用与移除 |
-| `Sources/Weave/RichTextClipboard.swift` | 结构化选区剪贴板编解码与粘贴时的块标识去重 |
-| `Sources/Weave/CodeBlockEditing.swift` | 代码语言、块范围、缩进和基础词法高亮规则 |
-| `Sources/Weave/NoteStore.swift` | 身份、标题、搜索投影、JSON 读写和失败恢复 |
+| `Sources/Weave/App/WeaveApp.swift` | 生命周期、存储实例、Mac 新建命令 |
+| `Sources/Weave/App/WorkspaceView.swift` | 分栏、列表与搜索、格式工具条与菜单、链接表单、Markdown 文件面板、错误状态 |
+| `Sources/Weave/Editor/Native/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、选区、输入事件和平台交互 |
+| `Sources/Weave/Editor/Features/EditorFeatureRegistry.swift` | 不可变输入上下文、feature 协议、语义命令与优先级 registry |
+| `Sources/Weave/Editor/Features/StandardEditorFeatures.swift` | quote、task/list、code block、inline 和 Markdown shortcut 等内置输入 feature |
+| `Sources/Weave/Editor/Native/NativeTextAttributes.swift` | TextKit 绘制、字体映射、原生属性与持久化属性转换 |
+| `Sources/Weave/Editor/ParagraphEditing.swift` | `DocumentTypography` 排版配置、独立行内强调、整段格式操作、旧语义字体迁移、待办标记切换 |
+| `Sources/Weave/Editor/MarkdownShortcut.swift` | 单次输入触发的局部转换规则，UTF-16 范围 |
+| `Sources/Weave/Markdown/MarkdownFormatting.swift` | 常用 Markdown 导入与语义导出，非全部富文本的无损编解码器 |
+| `Sources/Weave/Markdown/MarkdownFile.swift` | Markdown 文件类型与 SwiftUI 文档读写适配 |
+| `Sources/Weave/Model/Note.swift` | 笔记值模型、纯文本投影和兼容解码 |
+| `Sources/Weave/Model/TableData.swift` | 表格 Codable 模型、行列操作、Markdown 表格交换与纯文本投影 |
+| `Sources/Weave/Editor/Native/NativeTableView.swift` | 表格附件尺寸、原位单元格控件与行列菜单 |
+| `Sources/Weave/Editor/Native/NativeTableOverlay.swift` | 表格控件与代码块工具栏随原生文本布局定位、复用与移除 |
+| `Sources/Weave/Editor/RichTextClipboard.swift` | 结构化选区剪贴板编解码与粘贴时的块标识去重 |
+| `Sources/Weave/Editor/CodeBlockEditing.swift` | 代码语言、块范围、缩进和基础词法高亮规则 |
+| `Sources/Weave/Persistence/NoteStore.swift` | 身份、标题、搜索投影、JSON 读写和失败恢复 |
 
 当前自定义 `CodeLayoutManager: NSLayoutManager` 绘制行内代码、代码块背景和引用竖线，走 TextKit 1 布局路径；不能称作 TextKit 2 编辑器。macOS 以滚动容器内边距限制正文宽度，滚动条留在编辑区右边。
+
+原生输入先捕获为 `EditorInputContext`，再由 `EditorFeatureRegistry` 依次匹配 feature。feature 只返回 `EditorInputCommand`；
+`NativeRichTextEditor.Coordinator` 统一执行文本修改、输入属性、选区、撤销和发布。新增 feature 必须显式确定优先级，并覆盖与 quote、task、list、code 等已有 feature 的组合行为。
 
 输入事件经过平台 delegate、`Coordinator.intercept` 与局部转换规则，再发布富文本和选区。组合输入期间跳过转换；格式操作和快捷转换注册撤销。显示字体通过平台倍率放大，写回时还原，避免反复桥接导致字号增长。
 

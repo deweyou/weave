@@ -9,7 +9,7 @@ enum CodeBlockEditing {
     static let languages = [
         (id: "", title: "纯文本"), (id: "swift", title: "Swift"),
         (id: "javascript", title: "JavaScript"), (id: "typescript", title: "TypeScript"),
-        (id: "python", title: "Python"), (id: "json", title: "JSON"), (id: "shell", title: "Shell")
+        (id: "python", title: "Python"), (id: "json", title: "JSON"), (id: "shell", title: "Shell"),
     ]
 
     static func languageTag(from fence: String) -> String {
@@ -27,7 +27,9 @@ enum CodeBlockEditing {
             let range = NSRange(run.range, in: text)
             if let previous = blocks.last, previous.id == id, NSMaxRange(previous.range) == range.location {
                 blocks[blocks.count - 1].range.length += range.length
-            } else { blocks.append((id, range)) }
+            } else {
+                blocks.append((id, range))
+            }
         }
         return blocks.first { NSLocationInRange(probe, $0.range) && NSMaxRange(selected) <= NSMaxRange($0.range) }?.range
     }
@@ -38,7 +40,9 @@ enum CodeBlockEditing {
             text[range][CodeLanguageAttribute.self] = language
         }
         var attributes = selection.typingAttributes(in: text)
-        guard attributes[CodeStyleAttribute.self]?.hasPrefix("block:") == true || blockRange(in: text, selection: selection) != nil else { return }
+        guard attributes[CodeStyleAttribute.self]?.hasPrefix("block:") == true || blockRange(in: text, selection: selection) != nil else {
+            return
+        }
         attributes[CodeLanguageAttribute.self] = language
         if let selected, selected.length == 0, let range = Range<AttributedString.Index>(selected, in: text) {
             selection = AttributedTextSelection(insertionPoint: range.lowerBound, typingAttributes: attributes)
@@ -48,7 +52,8 @@ enum CodeBlockEditing {
     @discardableResult
     static func indent(in text: inout AttributedString, selection: inout AttributedTextSelection, outdent: Bool) -> Bool {
         guard let block = blockRange(in: text, selection: selection),
-              let selected = selectedRange(in: text, selection: selection) else { return false }
+            let selected = selectedRange(in: text, selection: selection)
+        else { return false }
         let source = String(text.characters) as NSString
         let last = selected.length == 0 ? selected.location : NSMaxRange(selected) - 1
         var location = max(block.location, source.lineRange(for: NSRange(location: selected.location, length: 0)).location)
@@ -63,14 +68,16 @@ enum CodeBlockEditing {
         // A trailing newline still belongs to this block; the empty last line has
         // no character run of its own until its first indentation is inserted.
         if !outdent, selected.length == 0, selected.location == source.length,
-           source.hasSuffix("\n"), NSMaxRange(block) == source.length {
+            source.hasSuffix("\n"), NSMaxRange(block) == source.length
+        {
             edits.append(NSRange(location: source.length, length: 0))
         }
         var start = selected.location
         var end = NSMaxRange(selected)
         for edit in edits.reversed() {
             guard let range = Range<AttributedString.Index>(edit, in: text) else { continue }
-            let attributes = text[range.lowerBound..<text.endIndex].runs.first?.attributes ?? text.runs.last?.attributes ?? AttributeContainer()
+            let attributes =
+                text[range.lowerBound..<text.endIndex].runs.first?.attributes ?? text.runs.last?.attributes ?? AttributeContainer()
             text.replaceSubrange(range, with: AttributedString(outdent ? "" : "    ", attributes: attributes))
             func shifted(_ offset: Int) -> Int {
                 guard offset >= edit.location else { return offset }
@@ -80,14 +87,16 @@ enum CodeBlockEditing {
             end = shifted(end)
         }
         if let restored = Range<AttributedString.Index>(NSRange(location: start, length: end - start), in: text) {
-            selection = restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
+            selection =
+                restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
         }
         return true
     }
 
     static func newline(in text: AttributedString, selection: AttributedTextSelection) -> String? {
         guard let selected = selectedRange(in: text, selection: selection), selected.length == 0,
-              blockRange(in: text, selection: selection) != nil else { return nil }
+            blockRange(in: text, selection: selection) != nil
+        else { return nil }
         let source = String(text.characters) as NSString
         let line = source.lineRange(for: selected)
         let before = source.substring(with: NSRange(location: line.location, length: selected.location - line.location))
@@ -115,25 +124,31 @@ enum CodeBlockEditing {
         let comments: String
         switch language {
         case "swift":
-            keywords = "actor associatedtype async await break case catch class continue default defer deinit do else enum extension fallthrough false fileprivate for func guard if import in init inout internal is let nil nonisolated open operator override private protocol public repeat rethrows return self Self some static struct subscript super switch throw throws true try typealias var weak where while"
+            keywords =
+                "actor associatedtype async await break case catch class continue default defer deinit do else enum extension fallthrough false fileprivate for func guard if import in init inout internal is let nil nonisolated open operator override private protocol public repeat rethrows return self Self some static struct subscript super switch throw throws true try typealias var weak where while"
             comments = #"//[^\r\n]*|/\*[\s\S]*?(?:\*/|$)"#
         case "javascript", "js", "typescript", "ts":
-            keywords = "abstract as async await break case catch class const continue debugger declare default delete do else enum export extends false finally for from function if implements import in instanceof interface let new null of private protected public readonly return static super switch this throw true try type typeof undefined var void while with yield"
+            keywords =
+                "abstract as async await break case catch class const continue debugger declare default delete do else enum export extends false finally for from function if implements import in instanceof interface let new null of private protected public readonly return static super switch this throw true try type typeof undefined var void while with yield"
             comments = #"//[^\r\n]*|/\*[\s\S]*?(?:\*/|$)"#
         case "python", "py":
-            keywords = "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield"
+            keywords =
+                "and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield"
             comments = #"#[^\r\n]*"#
         case "json":
             keywords = "true false null"
             comments = #"(?!)"#
         case "shell", "sh", "bash", "zsh":
-            keywords = "if then else elif fi for while do done case esac in function select until export local readonly return break continue"
+            keywords =
+                "if then else elif fi for while do done case esac in function select until export local readonly return break continue"
             comments = #"#[^\r\n]*"#
         default: return []
         }
         // A single scanner consumes strings/comments before words, so their content cannot acquire keyword colors.
-        let strings = #"\"\"\"[\s\S]*?(?:\"\"\"|$)|'''[\s\S]*?(?:'''|$)|\"(?:\\[\s\S]|[^\"\\])*(?:\"|$)|'(?:\\[\s\S]|[^'\\])*(?:'|$)|`(?:\\[\s\S]|[^`\\])*(?:`|$)"#
-        let pattern = "(" + comments + ")|(" + strings + #")|(\b(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b)|([\p{L}_$][\p{L}\p{N}_$]*)"#
+        let strings =
+            #"\"\"\"[\s\S]*?(?:\"\"\"|$)|'''[\s\S]*?(?:'''|$)|\"(?:\\[\s\S]|[^\"\\])*(?:\"|$)|'(?:\\[\s\S]|[^'\\])*(?:'|$)|`(?:\\[\s\S]|[^`\\])*(?:`|$)"#
+        let pattern =
+            "(" + comments + ")|(" + strings + #")|(\b(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b)|([\p{L}_$][\p{L}\p{N}_$]*)"#
         guard let scanner = try? NSRegularExpression(pattern: pattern) else { return [] }
         let words = Set(keywords.split(separator: " ").map(String.init))
         let text = source as NSString

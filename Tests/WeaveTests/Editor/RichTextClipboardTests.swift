@@ -1,5 +1,6 @@
 import SwiftUI
 import Testing
+
 @testable import Weave
 
 struct RichTextClipboardTests {
@@ -47,7 +48,9 @@ struct RichTextClipboardTests {
             text[CodeStyleAttribute.self] = style
             return text
         }
-        let original = code("one", style: "block:first") + AttributedString("\n") + code("two", style: "block:second") + AttributedString("\n") + code("three", style: "inline")
+        let original =
+            code("one", style: "block:first") + AttributedString("\n") + code("two", style: "block:second") + AttributedString("\n")
+            + code("three", style: "inline")
         let pasted = try RichTextClipboard.decode(RichTextClipboard.encode(original))
         let roles = pasted.runs.compactMap { $0[CodeStyleAttribute.self] }
         #expect(Set(roles).count == 3)

@@ -1,10 +1,12 @@
 import Foundation
 import Testing
+
 @testable import Weave
 
 struct MarkdownShortcutTests {
     private func type(_ character: String, after text: String, marked: Bool = false) -> MarkdownShortcut.Edit? {
-        MarkdownShortcut.match(text: text, range: NSRange(location: text.utf16.count, length: 0), replacement: character, hasMarkedText: marked)
+        MarkdownShortcut.match(
+            text: text, range: NSRange(location: text.utf16.count, length: 0), replacement: character, hasMarkedText: marked)
     }
 
     @Test func inlineCodeCanTouchTextOnBothSides() {
@@ -24,9 +26,16 @@ struct MarkdownShortcutTests {
                 for suffix in ["", "后文", "word", "123", "_"] {
                     let before = prefix + marker + "内容😀" + marker.dropLast()
                     let range = NSRange(location: before.utf16.count, length: 0)
-                    let edit = MarkdownShortcut.match(text: before + suffix, range: range, replacement: String(marker.last!), hasMarkedText: false)
-                    #expect(edit == .init(range: NSRange(location: prefix.utf16.count, length: before.utf16.count - prefix.utf16.count), replacement: "内容😀", style: style))
-                    #expect(MarkdownShortcut.match(text: before + suffix, range: range, replacement: String(marker.last!), hasMarkedText: true) == nil)
+                    let edit = MarkdownShortcut.match(
+                        text: before + suffix, range: range, replacement: String(marker.last!), hasMarkedText: false)
+                    #expect(
+                        edit
+                            == .init(
+                                range: NSRange(location: prefix.utf16.count, length: before.utf16.count - prefix.utf16.count),
+                                replacement: "内容😀", style: style))
+                    #expect(
+                        MarkdownShortcut.match(text: before + suffix, range: range, replacement: String(marker.last!), hasMarkedText: true)
+                            == nil)
                 }
             }
         }
@@ -38,7 +47,9 @@ struct MarkdownShortcutTests {
             for (nextMarker, _) in formats where marker.last != nextMarker.first {
                 let before = marker + "文字" + marker.dropLast()
                 let suffix = nextMarker + "后文" + nextMarker
-                let edit = MarkdownShortcut.match(text: before + suffix, range: NSRange(location: before.utf16.count, length: 0), replacement: String(marker.last!), hasMarkedText: false)
+                let edit = MarkdownShortcut.match(
+                    text: before + suffix, range: NSRange(location: before.utf16.count, length: 0), replacement: String(marker.last!),
+                    hasMarkedText: false)
                 #expect(edit == .init(range: NSRange(location: 0, length: before.utf16.count), replacement: "文字", style: style))
             }
         }
@@ -47,7 +58,10 @@ struct MarkdownShortcutTests {
     @Test func doesNotSplitAnExistingDelimiterRun() {
         for marker in ["*", "**", "~~", "`"] {
             let before = marker + "value" + marker.dropLast()
-            #expect(MarkdownShortcut.match(text: before + marker, range: NSRange(location: before.utf16.count, length: 0), replacement: String(marker.last!), hasMarkedText: false) == nil)
+            #expect(
+                MarkdownShortcut.match(
+                    text: before + marker, range: NSRange(location: before.utf16.count, length: 0), replacement: String(marker.last!),
+                    hasMarkedText: false) == nil)
         }
     }
 
@@ -82,7 +96,9 @@ struct MarkdownShortcutTests {
     }
 
     @Test func leavesLiteralAndUnfinishedSyntaxAlone() {
-        for text in ["**bold", "***", "\\*literal", "*literal\\", "* leading", "*trailing ", "*first\nsecond", "`code *literal", "**bold*more"] {
+        for text in [
+            "**bold", "***", "\\*literal", "*literal\\", "* leading", "*trailing ", "*first\nsecond", "`code *literal", "**bold*more",
+        ] {
             #expect(type("*", after: text) == nil, "Unexpected conversion: \(text)")
         }
         #expect(type("`", after: "``code") == nil)
@@ -92,7 +108,9 @@ struct MarkdownShortcutTests {
 
     @Test func boldCanTouchSurroundingText() {
         #expect(type("*", after: "正文**加粗*") == .init(range: NSRange(location: 2, length: 5), replacement: "加粗", style: .bold))
-        #expect(MarkdownShortcut.match(text: "正文**加粗*后文", range: NSRange(location: 7, length: 0), replacement: "*", hasMarkedText: false)?.style == .bold)
+        #expect(
+            MarkdownShortcut.match(text: "正文**加粗*后文", range: NSRange(location: 7, length: 0), replacement: "*", hasMarkedText: false)?.style
+                == .bold)
         #expect(type("*", after: "text**bold*")?.style == .bold)
         #expect(type("*", after: "正文\\**加粗*") == nil)
         #expect(type("*", after: "正文`**加粗*") == nil)

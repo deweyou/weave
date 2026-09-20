@@ -1,6 +1,7 @@
 import Foundation
-import Testing
 import SwiftUI
+import Testing
+
 @testable import Weave
 
 @MainActor
@@ -114,7 +115,9 @@ struct NoteStoreTests {
         #expect(restored.loadError == nil)
         let note = try #require(restored.notes.first)
         #expect(note.richText == document)
-        #expect(note.richText[note.richText.startIndex..<note.richText.index(note.richText.startIndex, offsetByCharacters: 3)].font == .title.bold())
+        #expect(
+            note.richText[note.richText.startIndex..<note.richText.index(note.richText.startIndex, offsetByCharacters: 3)].font
+                == .title.bold())
         #expect(note.title == "")
         #expect(note.preview == "标题 重点中文网站")
         restored.updateText(id: id, text: note.text)
@@ -147,7 +150,8 @@ struct NoteStoreTests {
         let file = directory.appendingPathComponent("notes.json")
         let id = UUID()
         for invalidRichText in ["null", "42", "{}", "\"different content\""] {
-            let invalid = Data("[{\"id\":\"\(id.uuidString)\",\"text\":\"原文\",\"richText\":\(invalidRichText),\"createdAt\":0,\"updatedAt\":0}]".utf8)
+            let invalid = Data(
+                "[{\"id\":\"\(id.uuidString)\",\"text\":\"原文\",\"richText\":\(invalidRichText),\"createdAt\":0,\"updatedAt\":0}]".utf8)
             try invalid.write(to: file)
             let store = NoteStore(directory: directory)
             #expect(store.loadError != nil)

@@ -1,8 +1,9 @@
 import SwiftUI
+
 #if os(macOS)
-import AppKit
+    import AppKit
 #else
-import UIKit
+    import UIKit
 #endif
 
 /// Reuses each hosting view across text-storage edits so native cell input keeps focus.
@@ -11,18 +12,18 @@ final class TableOverlayController {
     @MainActor private final class Entry {
         let model: NativeTableModel
         #if os(macOS)
-        let host: NSHostingView<TableBlockView>
+            let host: NSHostingView<TableBlockView>
         #else
-        let host: UIHostingController<TableBlockView>
+            let host: UIHostingController<TableBlockView>
         #endif
 
         init(model: NativeTableModel) {
             self.model = model
             #if os(macOS)
-            host = NSHostingView(rootView: TableBlockView(model: model))
+                host = NSHostingView(rootView: TableBlockView(model: model))
             #else
-            host = UIHostingController(rootView: TableBlockView(model: model))
-            host.view.backgroundColor = .clear
+                host = UIHostingController(rootView: TableBlockView(model: model))
+                host.view.backgroundColor = .clear
             #endif
         }
     }
@@ -39,19 +40,22 @@ final class TableOverlayController {
         isRefreshing = true
         defer { isRefreshing = false }
         #if os(macOS)
-        guard let storage = textView.textStorage, let layout = textView.layoutManager,
-              let container = textView.textContainer else { return }
-        let origin = textView.textContainerOrigin
+            guard let storage = textView.textStorage, let layout = textView.layoutManager,
+                let container = textView.textContainer
+            else { return }
+            let origin = textView.textContainerOrigin
         #else
-        let storage = textView.textStorage
-        let layout = textView.layoutManager
-        let container = textView.textContainer
-        let origin = CGPoint(x: textView.textContainerInset.left, y: textView.textContainerInset.top)
+            let storage = textView.textStorage
+            let layout = textView.layoutManager
+            let container = textView.textContainer
+            let origin = CGPoint(x: textView.textContainerInset.left, y: textView.textContainerInset.top)
         #endif
         var validIDs: Set<UUID> = []
-        storage.enumerateAttribute(NSAttributedString.Key(TableAttribute.name), in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+        storage.enumerateAttribute(NSAttributedString.Key(TableAttribute.name), in: NSRange(location: 0, length: storage.length)) {
+            value, range, _ in
             guard let data = value as? Data, let table = try? JSONDecoder().decode(TableData.self, from: data),
-                  !validIDs.contains(table.id) else { return }
+                !validIDs.contains(table.id)
+            else { return }
             validIDs.insert(table.id)
             let entry: Entry
             if let existing = self.entries[table.id] {
@@ -61,9 +65,9 @@ final class TableOverlayController {
                 entry = Entry(model: NativeTableModel(table: table, onChange: { _ in }, onExit: {}))
                 self.entries[table.id] = entry
                 #if os(macOS)
-                textView.addSubview(entry.host)
+                    textView.addSubview(entry.host)
                 #else
-                textView.addSubview(entry.host.view)
+                    textView.addSubview(entry.host.view)
                 #endif
             }
             entry.model.onChange = { onChange(table.id, $0) }
@@ -76,16 +80,16 @@ final class TableOverlayController {
                 height: TableTextAttachment.height(for: table)
             )
             #if os(macOS)
-            if entry.host.frame != frame { entry.host.frame = frame }
+                if entry.host.frame != frame { entry.host.frame = frame }
             #else
-            if entry.host.view.frame != frame { entry.host.view.frame = frame }
+                if entry.host.view.frame != frame { entry.host.view.frame = frame }
             #endif
         }
         for id in Set(entries.keys).subtracting(validIDs) {
             #if os(macOS)
-            entries[id]?.host.removeFromSuperview()
+                entries[id]?.host.removeFromSuperview()
             #else
-            entries[id]?.host.view.removeFromSuperview()
+                entries[id]?.host.view.removeFromSuperview()
             #endif
             entries.removeValue(forKey: id)
         }
@@ -117,10 +121,10 @@ struct CodeHeaderView: View {
             Spacer()
             Button {
                 #if os(macOS)
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(model.literal, forType: .string)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(model.literal, forType: .string)
                 #else
-                UIPasteboard.general.string = model.literal
+                    UIPasteboard.general.string = model.literal
                 #endif
                 copied = true
             } label: {
@@ -135,7 +139,7 @@ struct CodeHeaderView: View {
         .foregroundStyle(.secondary)
         .buttonStyle(.borderless)
         #if os(macOS)
-        .menuStyle(.borderlessButton)
+            .menuStyle(.borderlessButton)
         #endif
         .padding(.horizontal, DocumentTypography.codeInset)
         .frame(height: CodeLayoutManager.headerHeight)
@@ -155,16 +159,16 @@ final class CodeHeaderOverlayController {
     @MainActor private final class Entry {
         let model = CodeHeaderModel()
         #if os(macOS)
-        let host: NSHostingView<CodeHeaderView>
+            let host: NSHostingView<CodeHeaderView>
         #else
-        let host: UIHostingController<CodeHeaderView>
+            let host: UIHostingController<CodeHeaderView>
         #endif
         init() {
             #if os(macOS)
-            host = NSHostingView(rootView: CodeHeaderView(model: model))
+                host = NSHostingView(rootView: CodeHeaderView(model: model))
             #else
-            host = UIHostingController(rootView: CodeHeaderView(model: model))
-            host.view.backgroundColor = .clear
+                host = UIHostingController(rootView: CodeHeaderView(model: model))
+                host.view.backgroundColor = .clear
             #endif
         }
     }
@@ -176,28 +180,30 @@ final class CodeHeaderOverlayController {
         isRefreshing = true
         defer { isRefreshing = false }
         #if os(macOS)
-        guard let storage = textView.textStorage, let layout = textView.layoutManager,
-              let container = textView.textContainer else { return }
-        let origin = textView.textContainerOrigin
+            guard let storage = textView.textStorage, let layout = textView.layoutManager,
+                let container = textView.textContainer
+            else { return }
+            let origin = textView.textContainerOrigin
         #else
-        let storage = textView.textStorage
-        let layout = textView.layoutManager
-        let container = textView.textContainer
-        let origin = CGPoint(x: textView.textContainerInset.left, y: textView.textContainerInset.top)
+            let storage = textView.textStorage
+            let layout = textView.layoutManager
+            let container = textView.textContainer
+            let origin = CGPoint(x: textView.textContainerInset.left, y: textView.textContainerInset.top)
         #endif
         var validIDs: Set<String> = []
         storage.enumerateAttribute(.weaveCodeStyle, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
             guard let id = value as? String, id.hasPrefix("block:"), !validIDs.contains(id) else { return }
             validIDs.insert(id)
             let entry: Entry
-            if let existing = entries[id] { entry = existing }
-            else {
+            if let existing = entries[id] {
+                entry = existing
+            } else {
                 entry = Entry()
                 entries[id] = entry
                 #if os(macOS)
-                textView.addSubview(entry.host)
+                    textView.addSubview(entry.host)
                 #else
-                textView.addSubview(entry.host.view)
+                    textView.addSubview(entry.host.view)
                 #endif
             }
             entry.model.language = storage.attribute(.weaveCodeLanguage, at: range.location, effectiveRange: nil) as? String ?? ""
@@ -207,21 +213,22 @@ final class CodeHeaderOverlayController {
             entry.model.onLanguage = { onLanguage(id, $0) }
             let glyphs = layout.glyphRange(forCharacterRange: NSRange(location: range.location, length: 1), actualCharacterRange: nil)
             let bounds = layout.lineFragmentRect(forGlyphAt: glyphs.location, effectiveRange: nil)
-            let frame = CGRect(x: origin.x + container.lineFragmentPadding,
-                               y: origin.y + bounds.minY,
-                               width: max(1, container.size.width - 2 * container.lineFragmentPadding),
-                               height: CodeLayoutManager.headerHeight)
+            let frame = CGRect(
+                x: origin.x + container.lineFragmentPadding,
+                y: origin.y + bounds.minY,
+                width: max(1, container.size.width - 2 * container.lineFragmentPadding),
+                height: CodeLayoutManager.headerHeight)
             #if os(macOS)
-            if entry.host.frame != frame { entry.host.frame = frame }
+                if entry.host.frame != frame { entry.host.frame = frame }
             #else
-            if entry.host.view.frame != frame { entry.host.view.frame = frame }
+                if entry.host.view.frame != frame { entry.host.view.frame = frame }
             #endif
         }
         for id in Set(entries.keys).subtracting(validIDs) {
             #if os(macOS)
-            entries[id]?.host.removeFromSuperview()
+                entries[id]?.host.removeFromSuperview()
             #else
-            entries[id]?.host.view.removeFromSuperview()
+                entries[id]?.host.view.removeFromSuperview()
             #endif
             entries.removeValue(forKey: id)
         }

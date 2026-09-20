@@ -1,8 +1,9 @@
 import SwiftUI
+
 #if os(macOS)
-import AppKit
+    import AppKit
 #else
-import UIKit
+    import UIKit
 #endif
 
 /// The attachment reserves document space; native controls draw and edit the cells.
@@ -14,7 +15,7 @@ final class TableTextAttachment: NSTextAttachment {
         super.init(data: nil, ofType: nil)
         bounds = CGRect(x: 0, y: 0, width: 320, height: Self.height(for: table))
         #if os(macOS)
-        attachmentCell = TableAttachmentCell(height: Self.height(for: table))
+            attachmentCell = TableAttachmentCell(height: Self.height(for: table))
         #endif
     }
 
@@ -34,28 +35,30 @@ final class TableTextAttachment: NSTextAttachment {
 }
 
 #if os(macOS)
-/// TextKit 1 on macOS queries the cell for layout, rather than attachmentBounds.
-private final class TableAttachmentCell: NSTextAttachmentCell {
-    nonisolated let tableHeight: CGFloat
-    init(height: CGFloat) {
-        tableHeight = height
-        super.init(textCell: "")
+    /// TextKit 1 on macOS queries the cell for layout, rather than attachmentBounds.
+    private final class TableAttachmentCell: NSTextAttachmentCell {
+        nonisolated let tableHeight: CGFloat
+        init(height: CGFloat) {
+            tableHeight = height
+            super.init(textCell: "")
+        }
+        required init(coder: NSCoder) {
+            tableHeight = max(DocumentTypography.tableRowHeight, coder.decodeDouble(forKey: "tableHeight"))
+            super.init(coder: coder)
+        }
+        override func encode(with coder: NSCoder) {
+            super.encode(with: coder)
+            coder.encode(tableHeight, forKey: "tableHeight")
+        }
+        nonisolated override func cellSize() -> NSSize { NSSize(width: 320, height: tableHeight) }
+        nonisolated override func cellFrame(
+            for textContainer: NSTextContainer, proposedLineFragment lineFrag: NSRect,
+            glyphPosition position: NSPoint, characterIndex charIndex: Int
+        ) -> NSRect {
+            NSRect(x: 0, y: 0, width: max(1, textContainer.size.width - 2 * textContainer.lineFragmentPadding), height: tableHeight)
+        }
+        override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {}
     }
-    required init(coder: NSCoder) {
-        tableHeight = max(DocumentTypography.tableRowHeight, coder.decodeDouble(forKey: "tableHeight"))
-        super.init(coder: coder)
-    }
-    override func encode(with coder: NSCoder) {
-        super.encode(with: coder)
-        coder.encode(tableHeight, forKey: "tableHeight")
-    }
-    nonisolated override func cellSize() -> NSSize { NSSize(width: 320, height: tableHeight) }
-    nonisolated override func cellFrame(for textContainer: NSTextContainer, proposedLineFragment lineFrag: NSRect,
-                                       glyphPosition position: NSPoint, characterIndex charIndex: Int) -> NSRect {
-        NSRect(x: 0, y: 0, width: max(1, textContainer.size.width - 2 * textContainer.lineFragmentPadding), height: tableHeight)
-    }
-    override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {}
-}
 #endif
 
 @Observable @MainActor
@@ -82,7 +85,10 @@ final class NativeTableModel {
 struct TableBlockView: View {
     @Environment(\.fontResolutionContext) private var fontContext
     @Bindable var model: NativeTableModel
-    private struct Cell: Hashable { var row: Int; var column: Int }
+    private struct Cell: Hashable {
+        var row: Int
+        var column: Int
+    }
     @FocusState private var focusedCell: Cell?
     @State private var isHovering = false
     @State private var activeCell = Cell(row: 0, column: 0)
@@ -99,7 +105,10 @@ struct TableBlockView: View {
                                 HStack(spacing: 0) {
                                     ForEach(model.table.alignments.indices, id: \.self) { column in
                                         cell(row: row, column: column)
-                                            .frame(width: max(140, geometry.size.width / CGFloat(model.table.alignments.count)), height: DocumentTypography.tableRowHeight)
+                                            .frame(
+                                                width: max(140, geometry.size.width / CGFloat(model.table.alignments.count)),
+                                                height: DocumentTypography.tableRowHeight
+                                            )
                                             .background(row == 0 ? Color.primary.opacity(0.035) : .clear)
                                             .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.07)).frame(height: 0.5) }
                                             .overlay(alignment: .trailing) { Rectangle().fill(.primary.opacity(0.07)).frame(width: 0.5) }
@@ -187,22 +196,25 @@ struct TableBlockView: View {
         .font(.system(size: DocumentTypography.controlFontSize))
         .buttonStyle(.borderless)
         #if os(macOS)
-        .menuStyle(.borderlessButton)
+            .menuStyle(.borderlessButton)
         #endif
         .padding(.horizontal, 8)
     }
 
     private func cell(row: Int, column: Int) -> some View {
-        TextField(row == 0 ? "表头" : "", text: Binding(
-            get: {
-                guard model.table.rows.indices.contains(row), model.table.alignments.indices.contains(column) else { return "" }
-                return model.table.rows[row][column]
-            },
-            set: { value in
-                guard model.table.rows.indices.contains(row), model.table.alignments.indices.contains(column) else { return }
-                model.change { $0.rows[row][column] = value }
-            }
-        ))
+        TextField(
+            row == 0 ? "表头" : "",
+            text: Binding(
+                get: {
+                    guard model.table.rows.indices.contains(row), model.table.alignments.indices.contains(column) else { return "" }
+                    return model.table.rows[row][column]
+                },
+                set: { value in
+                    guard model.table.rows.indices.contains(row), model.table.alignments.indices.contains(column) else { return }
+                    model.change { $0.rows[row][column] = value }
+                }
+            )
+        )
         .textFieldStyle(.plain)
         .font(Font(NativeTextAttributes.displayFont(Font.body.resolve(in: fontContext).ctFont)).weight(row == 0 ? .semibold : .regular))
         .multilineTextAlignment(textAlignment(column))

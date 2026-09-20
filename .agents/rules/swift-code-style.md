@@ -38,6 +38,11 @@
 ## 组织与改动
 
 - 一个类型或函数只承担一个清晰职责。复杂视图按真实的状态与刷新边界拆分，不机械执行“一类型一文件”。
+- `Sources/Weave` 按稳定领域边界组织：`App` 放生命周期和工作区界面，`Editor` 放编辑语义与原生桥接，
+  `Markdown` 放交换格式，`Model` 放共享值类型，`Persistence` 放存储边界。`Tests/WeaveTests` 镜像对应领域；
+  跨领域 UI 流程保留在 `UITests`。
+- 编辑 feature 读取不可变输入上下文并返回语义命令，不直接持有或修改 `NSTextView`、`UITextView` 或 `NSTextStorage`；
+  原生 coordinator 统一负责选区、输入属性、撤销和发布。新增 feature 时显式处理规则优先级与组合冲突。
 - 保持改动聚焦，不把行为修复、目录重排、批量重命名和格式化混在同一差异中。
 - 不预建抽象、协议或空包。出现稳定的重复和明确变化边界后再提取复用。
 - 新增源码时同时核对 Swift Package 与 Xcode target；使用当前部署目标和工具链可用的 API。
@@ -48,4 +53,6 @@
 - 测试可观察行为和数据契约。修复缺陷时覆盖触发序列、结果与后续输入，不冻结无关实现细节。
 - 编辑器用例覆盖中文组合输入、UTF-16 选区、撤销/重做、空段落、文档首尾和格式边界。
 - 参数化真正平行的 case；共享 setup 不能隐藏关键操作顺序。
+- 提交前运行仓库工具链自带的 `swift format lint --recursive --strict --configuration .swift-format`；
+  规则调整必须修改受版本控制的 `.swift-format`，不能只依赖个人 IDE 设置。
 - 按 `docs/verification.md` 运行受影响测试和平台构建。界面或输入行为还需在对应原生 App 中复现验收。

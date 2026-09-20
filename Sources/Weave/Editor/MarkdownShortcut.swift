@@ -2,7 +2,17 @@ import Foundation
 
 enum MarkdownShortcut {
     enum Style: Equatable {
-        case heading(Int), bullet, quote, bold, italic, strike, code, body, numbered, task, codeBlock
+        case heading(Int)
+        case bullet
+        case quote
+        case bold
+        case italic
+        case strike
+        case code
+        case body
+        case numbered
+        case task
+        case codeBlock
     }
 
     struct Edit: Equatable {
@@ -14,11 +24,14 @@ enum MarkdownShortcut {
     static func listPrefix(_ line: String) -> (prefix: String, next: String, style: Style)? {
         let indent = String(line.prefix(while: { $0 == "\t" }))
         let body = String(line.dropFirst(indent.count))
-        for (marker, next, style) in [("• ", "• ", Style.bullet), ("│ ", "│ ", Style.quote), ("☐ ", "☐ ", Style.task), ("☑ ", "☐ ", Style.task)] where body.hasPrefix(marker) {
+        for (marker, next, style) in [
+            ("• ", "• ", Style.bullet), ("│ ", "│ ", Style.quote), ("☐ ", "☐ ", Style.task), ("☑ ", "☐ ", Style.task),
+        ] where body.hasPrefix(marker) {
             return (indent + marker, indent + next, style)
         }
         if let range = body.range(of: #"^\d{1,6}\. "#, options: .regularExpression),
-           let number = Int(body[range].dropLast(2)), number < 999999 {
+            let number = Int(body[range].dropLast(2)), number < 999999
+        {
             return (indent + String(body[range]), indent + "\(number + 1). ", .numbered)
         }
         return nil
@@ -26,7 +39,8 @@ enum MarkdownShortcut {
 
     static func match(text: String, range: NSRange, replacement: String, hasMarkedText: Bool) -> Edit? {
         guard !hasMarkedText, range.length == 0, replacement.count == 1,
-              let insertion = Range(range, in: text) else { return nil }
+            let insertion = Range(range, in: text)
+        else { return nil }
         let before = text[..<insertion.lowerBound]
         let lineStart = before.lastIndex(where: { $0.isNewline }).map { text.index(after: $0) } ?? text.startIndex
         let line = String(text[lineStart..<insertion.lowerBound])
@@ -67,10 +81,12 @@ enum MarkdownShortcut {
 
         guard replacement == "*" || replacement == "`" || replacement == "~" else { return nil }
         let candidate = line + replacement
-        let patterns: [(String, Style)] = replacement == "*" ? [
-            (#"(?<![\\*])\*\*([^*\r\n]+)\*\*$"#, .bold),
-            (#"(?<![\\*])\*([^*\r\n]+)\*$"#, .italic)
-        ] : replacement == "~" ? [(#"(?<![\\~])~~([^~\r\n]+)~~$"#, .strike)] : [(#"(?<![\\`])`([^`\r\n]+)`$"#, .code)]
+        let patterns: [(String, Style)] =
+            replacement == "*"
+            ? [
+                (#"(?<![\\*])\*\*([^*\r\n]+)\*\*$"#, .bold),
+                (#"(?<![\\*])\*([^*\r\n]+)\*$"#, .italic),
+            ] : replacement == "~" ? [(#"(?<![\\~])~~([^~\r\n]+)~~$"#, .strike)] : [(#"(?<![\\`])`([^`\r\n]+)`$"#, .code)]
         for (pattern, style) in patterns {
             if insertion.lowerBound != text.endIndex {
                 let next = text[insertion.lowerBound]
@@ -78,12 +94,14 @@ enum MarkdownShortcut {
                 if String(next) == replacement { continue }
             }
             guard let expression = try? NSRegularExpression(pattern: pattern),
-                  let match = expression.firstMatch(in: candidate, range: NSRange(location: 0, length: candidate.utf16.count)),
-                  let contentRange = Range(match.range(at: 1), in: candidate),
-                  let matchRange = Range(match.range, in: candidate) else { continue }
+                let match = expression.firstMatch(in: candidate, range: NSRange(location: 0, length: candidate.utf16.count)),
+                let contentRange = Range(match.range(at: 1), in: candidate),
+                let matchRange = Range(match.range, in: candidate)
+            else { continue }
             let content = String(candidate[contentRange])
             guard content.first?.isWhitespace == false, content.last?.isWhitespace == false,
-                  !content.hasSuffix("\\") else { continue }
+                !content.hasSuffix("\\")
+            else { continue }
             // Asterisks inside an unfinished inline code span must remain literal.
             let preceding = candidate[..<matchRange.lowerBound]
             // A single star inside an unfinished bold span is not a new italic opener.
@@ -95,7 +113,9 @@ enum MarkdownShortcut {
                 isEscaped = character == "\\" && !isEscaped
             }
             guard backticks.isMultiple(of: 2) else { continue }
-            return Edit(range: NSRange(location: lineOffset + match.range.location, length: match.range.length - replacement.utf16.count), replacement: content, style: style)
+            return Edit(
+                range: NSRange(location: lineOffset + match.range.location, length: match.range.length - replacement.utf16.count),
+                replacement: content, style: style)
         }
         return nil
     }

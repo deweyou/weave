@@ -6,6 +6,7 @@
 
 | 影响范围 | 命令 / 检查 | 能证明什么 |
 | --- | --- | --- |
+| Swift 格式 / 静态风格 | `swift format lint --recursive --strict --configuration .swift-format Sources Tests UITests Package.swift` | Swift 源码符合仓库格式与基础静态规则 |
 | Swift 行为 / 数据修改 | `swift test` | 现有测试覆盖的规则、存储与桥接行为 |
 | Mac 代码与共享代码 | `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build` | Mac target 编译 |
 | iOS 代码与共享代码 | `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build` | iOS Simulator target 编译 |
@@ -53,12 +54,13 @@ Mac 文字布局调整需检查中文、英文、空段、标题、跨行选择�
 本地单测和门禁：
 
 ```sh
+swift format lint --recursive --strict --configuration .swift-format Sources Tests UITests Package.swift
 swift test --enable-code-coverage
 python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView 和 NativeTableView；桥接组包含 NativeRichTextEditor 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；所有文件都计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView 和 NativeTableView；桥接组包含 NativeRichTextEditor、NativeTextAttributes 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；所有文件都计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
 
 当前覆盖率来自单测，不混入 UI 执行数据；不提供分支覆盖率或新增行覆盖率门禁。UI 测试通过是独立检查，也不等于截图像素回归通过。
 

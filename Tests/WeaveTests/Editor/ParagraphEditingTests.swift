@@ -1,5 +1,6 @@
 import SwiftUI
 import Testing
+
 @testable import Weave
 
 struct ParagraphEditingTests {
@@ -83,8 +84,11 @@ struct ParagraphEditingTests {
             var selection = AttributedTextSelection(insertionPoint: text.endIndex)
             ParagraphEditing.apply(style, to: &text, selection: &selection)
             #expect(String(text.characters) == "Title\n" + marker)
-            if case .insertionPoint(let caret) = selection.indices(in: text) { #expect(caret == text.endIndex) }
-            else { Issue.record("Expected insertion point") }
+            if case .insertionPoint(let caret) = selection.indices(in: text) {
+                #expect(caret == text.endIndex)
+            } else {
+                Issue.record("Expected insertion point")
+            }
         }
     }
 
@@ -105,8 +109,11 @@ struct ParagraphEditingTests {
         var selection = AttributedTextSelection(insertionPoint: text.endIndex)
         for _ in 0..<10 { ParagraphEditing.indentList(in: &text, selection: &selection, outdent: false) }
         #expect(String(text.characters) == String(repeating: "\t", count: 8) + "• 🌊")
-        if case .insertionPoint(let caret) = selection.indices(in: text) { #expect(caret == text.endIndex) }
-        else { Issue.record("Expected insertion point") }
+        if case .insertionPoint(let caret) = selection.indices(in: text) {
+            #expect(caret == text.endIndex)
+        } else {
+            Issue.record("Expected insertion point")
+        }
         for _ in 0..<10 { ParagraphEditing.indentList(in: &text, selection: &selection, outdent: true) }
         #expect(String(text.characters) == "• 🌊")
     }
@@ -164,7 +171,8 @@ struct ParagraphEditingTests {
 
     @Test func inputRulesContinueNumberingTasksAndNestedLists() {
         func match(_ source: String, _ input: String) -> MarkdownShortcut.Edit? {
-            MarkdownShortcut.match(text: source, range: NSRange(location: source.utf16.count, length: 0), replacement: input, hasMarkedText: false)
+            MarkdownShortcut.match(
+                text: source, range: NSRange(location: source.utf16.count, length: 0), replacement: input, hasMarkedText: false)
         }
         #expect(match("1.", " ")?.style == .numbered)
         #expect(match("9. 完成", "\n")?.replacement == "\n10. ")
