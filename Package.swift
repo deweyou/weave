@@ -7,6 +7,6 @@ let package = Package(
     products: [.executable(name: "Weave", targets: ["Weave"])],
     targets: [
         .executableTarget(name: "Weave"),
-        .testTarget(name: "WeaveTests", dependencies: ["Weave"])
+        .testTarget(name: "WeaveTests", dependencies: ["Weave"]),
     ]
 )

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="180" viewBox="0 0 640 180" role="img" aria-labelledby="title desc">
+  <title id="title">Weave Markdown sample</title>
+  <desc id="desc">A document icon beside the word Weave on a pale blue background.</desc>
+  <rect width="640" height="180" rx="20" fill="#eef4fa"/>
+  <rect x="52" y="38" width="76" height="104" rx="10" fill="#fff" stroke="#8ba6bc" stroke-width="2"/>
+  <path d="M70 66h40M70 84h40M70 102h26" fill="none" stroke="#527891" stroke-width="4" stroke-linecap="round"/>
+  <text x="164" y="92" font-family="system-ui, sans-serif" font-size="36" font-weight="600" fill="#223c50">Weave</text>
+  <text x="166" y="121" font-family="system-ui, sans-serif" font-size="16" fill="#527891">Markdown · A place to write</text>
+</svg>

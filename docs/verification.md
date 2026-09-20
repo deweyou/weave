@@ -6,6 +6,7 @@
 
 | 影响范围 | 命令 / 检查 | 能证明什么 |
 | --- | --- | --- |
+| Swift 格式 / 静态风格 | `swift format lint --recursive --strict --configuration .swift-format Sources Tests UITests Package.swift` | Swift 源码符合仓库格式与基础静态规则 |
 | Swift 行为 / 数据修改 | `swift test` | 现有测试覆盖的规则、存储与桥接行为 |
 | Mac 代码与共享代码 | `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build` | Mac target 编译 |
 | iOS 代码与共享代码 | `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build` | iOS Simulator target 编译 |
@@ -14,15 +15,20 @@
 
 首次使用需 Xcode / Swift 6.2 兼容工具链。沙箱中的宏插件或编译缓存权限失败属于环境问题；明确报告并走宿主授权，不把关闭沙箱作为仓库默认命令。日志和构建产物放 `.build/` 或任务临时目录，Run 中按需记录 Evidence。
 
+Mac 实际预览使用 `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build` 做本地 ad-hoc 签名，保留工程的 App Sandbox 配置。`CODE_SIGNING_ALLOWED=NO` 只用于编译验证；直接运行无签名产物可能改用非容器 Application Support，不能据此判定原笔记丢失。重启按 AGENTS 的单实例规则操作，先核对会话、保存状态与实际数据目录。
+
 ## 手动操作矩阵
 
 | 改动 | 必测场景 |
 | --- | --- |
-| 输入 / 快捷语法 | 中文拼音组合与候选确认、emoji、选区替换；`正文**加粗**` 紧贴文字、转义星号、代码内字面量；多字符粘贴 |
-| 字体 / 段落 | 空行光标高度、标题回车恢复正文；选中半段应用标题；格式后继续输入；切换记录不放大字号 |
+| 输入 / 快捷语法 | 中文拼音组合与候选确认、emoji、选区替换；加粗、斜体、删除线与反引号行内代码前后紧贴中英文、数字或 emoji；在已有后文或不同格式标记前补结束符，同类连续分隔符不提前转换，标题内闭合后保留层级与后续输入属性；完整删除行内代码、粗体、斜体或删除线后继续输入应恢复当前段落普通文字；转义星号、代码内字面量；多字符粘贴 |
+| 字体 / 段落 | 空行光标高度、标题回车恢复正文；标题文字删空后再次退格恢复正文，包含文档首段；空行输入首字和删除至空时，检查下方正文及标题位置稳定；选中半段应用标题；正文与六级标题互转后，保留加粗、斜体、链接及行内代码；强调经过导出、剪贴板和重启恢复；格式后继续输入；旧语义字体迁移及大字号正文不被误判；切换记录不放大字号 |
 | 列表 / 待办 | 有序与无序续写、空行退出、前缀退格、Tab / Shift-Tab；点击勾选、拖选与撤销 |
-| 代码 / 引用 | 行内代码与连续多行表面、空行退出、边界插入、跨块选区；滚动、窄窗口与深色 |
+| 表格 | 单元格原位输入、Tab / Shift-Tab、末格新增行、增删行列、列对齐、超宽横向滚动、正文前后不重叠、撤销和重启；含表格/代码的复制、剪切、粘贴到同一或不同笔记；空格与管道转义的 Markdown 往返 |
+| 代码 / 引用 | 行内代码与连续多行表面、空行退出、边界插入、跨块选区；代码内与文末空行之间反复点击，背景范围和圆角保持稳定；Mac 点击代码块下方退出、撤销、重做及继续输入正文；结束围栏后的空段不继承代码；点击已有正文空段后继续输入不继承前一个代码块；相邻或分离的代码范围背景不叠色；引用默认次要文字色、竖线首尾、连续行和双 Return 退出；引用内分别输入标题、Todo、有序/无序列表和围栏代码快捷语法并完成 Markdown 往返；滚动、窄窗口与深色 |
 | 链接 | 选中文字粘贴 URL、Cmd-K、编辑 / 移除链接、标签保持、撤销 |
+| Markdown 交换 | UTF-8 文件导入创建新记录；复制 / 导出后再导入；分隔空行只生成段落边界，额外空段和段内换行重复往返不累积；TextKit 换段相对段内换行增加 6 pt，空段输入前后下文位置稳定；格式空白边界、反引号围栏、标点转义；系统面板取消与读取 / 写入错误 |
+| 独立标题 | 空标题 placeholder、长文本自动折行和四行内增长、Return / Tab / 点击进入正文、粘贴换行折叠为空格、标题输入与撤销、切换记录和重启保留；正文修改不改标题、摘要包含正文首行、搜索匹配标题与正文；旧记录迁移不删正文；导入以文件名命名、导出内容不附加标题 |
 | 存储 | 隔离目录的重启恢复、旧文本迁移、损坏富文本保护、写失败后重试；不得破坏真实用户数据 |
 | 导航 / 窗口 | 新建、搜索、切换记录、焦点、右侧滚动条、窄窗口；修改前后的实际 App 对比 |
 | 无障碍 / 移动端 | VoiceOver、字号、对比度、减少透明度 / 动态效果；触控光标与选择、软键盘、硬件键盘、横竖屏 |
@@ -30,6 +36,8 @@
 小改动只跑受影响行为和必要构建；失败后补最小回归。测试通过后不无理由重复全部检查。首次平台接入或输入架构变化需扩大矩阵。
 
 ## 验收边界
+
+Mac 文字布局调整需检查中文、英文、空段、标题、跨行选择、emoji、代码块首行及表格附件；文字基线和下方段落位置应保持不变。几何回归与实际 App 截图分别记录，原生光标与选区几何通过 TextKit API 检查，并在 App 中验证焦点、移动和闪烁，不用自定义绘制辅助函数作为验收依据。
 
 没有操作证据的项目写“待验证”；模拟器编译不等于模拟器运行，更不等于真机通过。单元测试对 marked text 的布尔保护不等于真实中文输入法通过。截图不等于撤销、保存或选择行为通过。
 
@@ -46,12 +54,13 @@
 本地单测和门禁：
 
 ```sh
+swift format lint --recursive --strict --configuration .swift-format Sources Tests UITests Package.swift
 swift test --enable-code-coverage
 python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。核心包含除了 App 入口、SwiftUI 界面和原生桥接以外的全部 Swift 文件，新增文件默认纳入；所有文件都计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView 和 NativeTableView；桥接组包含 NativeRichTextEditor、NativeTextAttributes 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；所有文件都计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
 
 当前覆盖率来自单测，不混入 UI 执行数据；不提供分支覆盖率或新增行覆盖率门禁。UI 测试通过是独立检查，也不等于截图像素回归通过。
 

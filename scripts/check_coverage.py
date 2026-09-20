@@ -2,11 +2,12 @@
 """Gate LLVM line coverage. Every app source participates in the overall gate."""
 import argparse
 import json
+import sys
 from pathlib import Path
 
 # UI declarations are covered by XCUITest separately; never hide them in totals.
-UI_FILES = {"WeaveApp.swift", "WorkspaceView.swift"}
-BRIDGE_FILES = {"NativeRichTextEditor.swift"}
+UI_FILES = {"WeaveApp.swift", "WorkspaceView.swift", "NativeTableView.swift"}
+BRIDGE_FILES = {"NativeRichTextEditor.swift", "NativeTextAttributes.swift", "NativeTableOverlay.swift"}
 THRESHOLDS = {"all": 35.0, "core": 90.0, "bridge": 55.0}
 
 
@@ -61,7 +62,7 @@ def main():
         parser.exit(1, f"Coverage failed: {error}\n")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(summary)
-    print(summary)
+    sys.stdout.write(summary + "\n")
     return 0 if passed else 1
 
 

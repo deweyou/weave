@@ -4,6 +4,7 @@
 
 | 问题 | 阅读入口 | 需要同时检查 |
 | --- | --- | --- |
+| 查看 Markdown 全集与实际效果 | [效果手册](examples/markdown-showcase.md) | 在 App 中导入；已支持能力与兼容性对照分开标注 |
 | 本期做什么、未来做什么 | [产品](product.md)、[本期规格](specs/first-release.md) | 用户本次范围 |
 | 代码在哪里、数据如何保存 | [架构](architecture.md) | `Sources/Weave` |
 | 正文样式与原生交互怎么设计 | [设计](../DESIGN.md) | 当前 App、两份设计 skill |
