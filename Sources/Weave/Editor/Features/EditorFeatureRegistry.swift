@@ -11,6 +11,7 @@ struct EditorInputContext {
     let trailingBoundary: Int?
     let role: String?
     let codeStyle: String?
+    let listMarker: String?
     let isQuoted: Bool
 
     init(
@@ -53,6 +54,9 @@ struct EditorInputContext {
             persistedAnchor.flatMap {
                 storage.attribute(.weaveParagraphStyle, at: $0, effectiveRange: nil) as? String
             } ?? typingAttributes[.weaveParagraphStyle] as? String
+        listMarker =
+            typingAttributes[.weaveListMarker] as? String
+            ?? persistedAnchor.flatMap { storage.attribute(.weaveListMarker, at: $0, effectiveRange: nil) as? String }
         codeStyle =
             persistedAnchor.flatMap {
                 storage.attribute(.weaveCodeStyle, at: $0, effectiveRange: nil) as? String

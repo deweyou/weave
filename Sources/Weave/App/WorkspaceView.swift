@@ -158,6 +158,7 @@ struct NoteEditorView: View {
     @State private var exportError: String?
     @State private var didCopyMarkdown = false
     @State private var bodyFocusRequest = 0
+    @State private var toast = ToastPresenter()
     @Environment(\.undoManager) private var undoManager
     @Environment(\.fontResolutionContext) private var fontContext
 
@@ -216,7 +217,8 @@ struct NoteEditorView: View {
                 onEditLink: {
                     linkAddress = selection.attributes(in: richText).compactMap { $0.link?.absoluteString }.first ?? ""
                     showsLinkEditor = true
-                }
+                },
+                onToast: { toast.show($0) }
             )
             .font(.body)
             .frame(maxWidth: .infinity)
@@ -224,6 +226,9 @@ struct NoteEditorView: View {
             .accessibilityLabel("记录正文")
         }
         .background(editorCanvasColor)
+        .overlay { ToastOverlay(presenter: toast) }
+        .onChange(of: note.id) { _, _ in toast.clear() }
+        .onDisappear { toast.clear() }
         .navigationTitle(note.displayTitle)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {

@@ -79,7 +79,7 @@ struct MarkdownShortcutTests {
             #expect(type(" ", after: marker) == .init(range: NSRange(location: 0, length: level), replacement: "", style: .heading(level)))
         }
         for marker in ["-", "*", "+"] {
-            #expect(type(" ", after: marker)?.replacement == "• ")
+            #expect(type(" ", after: marker)?.replacement == "")
             #expect(type(" ", after: marker)?.style == .bullet)
         }
         #expect(type(" ", after: ">") == .init(range: NSRange(location: 0, length: 1), replacement: "", style: .quote))

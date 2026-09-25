@@ -19,6 +19,7 @@ enum MarkdownShortcut {
         let range: NSRange
         let replacement: String
         let style: Style
+        var listMarker: String? = nil
     }
 
     static func listPrefix(_ line: String) -> (prefix: String, next: String, style: Style)? {
@@ -46,21 +47,26 @@ enum MarkdownShortcut {
         let line = String(text[lineStart..<insertion.lowerBound])
         let lineOffset = text[..<lineStart].utf16.count
 
-        if replacement == "\n", line.hasPrefix("```"), !line.dropFirst(3).contains("`") {
+        if ["\n", " "].contains(replacement), line.hasPrefix("```"), !line.dropFirst(3).contains("`") {
             return Edit(range: NSRange(location: lineOffset, length: line.utf16.count), replacement: "", style: .codeBlock)
         }
         if replacement == " " {
-            if ["[]", "[ ]", "- [ ]", "• [ ]"].contains(line) {
-                return Edit(range: NSRange(location: lineOffset, length: line.utf16.count), replacement: "", style: .task)
+            let indent = String(line.prefix(while: { $0 == "\t" }))
+            let listLine = String(line.dropFirst(indent.count))
+            if ["[]", "[ ]", "- [ ]", "• [ ]"].contains(listLine) {
+                return Edit(range: NSRange(location: lineOffset, length: line.utf16.count), replacement: indent, style: .task)
             }
-            if line.range(of: #"^\d{1,6}\.$"#, options: .regularExpression) != nil {
-                return Edit(range: NSRange(location: lineOffset, length: line.utf16.count), replacement: line + " ", style: .numbered)
+            if listLine.range(of: #"^\d{1,6}\.$"#, options: .regularExpression) != nil {
+                return Edit(
+                    range: NSRange(location: lineOffset, length: line.utf16.count), replacement: indent, style: .numbered,
+                    listMarker: listLine)
             }
             if (1...6).contains(line.count), line.allSatisfy({ $0 == "#" }) {
                 return Edit(range: NSRange(location: lineOffset, length: line.utf16.count), replacement: "", style: .heading(line.count))
             }
-            if ["-", "*", "+"].contains(line) {
-                return Edit(range: NSRange(location: lineOffset, length: 1), replacement: "• ", style: .bullet)
+            if ["-", "*", "+"].contains(listLine) {
+                return Edit(
+                    range: NSRange(location: lineOffset, length: line.utf16.count), replacement: indent, style: .bullet, listMarker: "•")
             }
             if line == ">" {
                 return Edit(range: NSRange(location: lineOffset, length: 1), replacement: "", style: .quote)

@@ -53,7 +53,7 @@ struct MarkdownFormattingTests {
 
     @Test func formatsCommonSyntaxAndPreservesChineseParagraphs() {
         let result = MarkdownFormatting.render("# 中文标题\n\n**加粗** 与 *斜体*\n- 列表\n> 引用\n1. 第一项\n- [x] 完成")
-        #expect(String(result.characters) == "中文标题\n加粗 与 斜体\n• 列表\n引用\n1. 第一项\n完成")
+        #expect(String(result.characters) == "中文标题\n加粗 与 斜体\n列表\n引用\n第一项\n完成")
         #expect(result[result.range(of: "引用")!][QuoteAttribute.self] == true)
         #expect(result[result.range(of: "完成")!][TaskStateAttribute.self] == true)
         let title = result.range(of: "中文标题")!
@@ -188,7 +188,7 @@ extension MarkdownFormattingTests {
 
     @MainActor @Test func normalizesImportedListIndentationAndExportsLegacyNumbering() {
         let text = MarkdownFormatting.render("    - nested\n  - [ ] task")
-        #expect(String(text.characters) == "\t• nested\n\ttask")
+        #expect(String(text.characters) == "\tnested\n\ttask")
         var legacy = AttributedString("3. existing")
         legacy[ParagraphStyleAttribute.self] = "body"
         #expect(MarkdownFormatting.serialize(legacy, context: EnvironmentValues().fontResolutionContext) == "3. existing")
@@ -211,5 +211,70 @@ extension MarkdownFormattingTests {
             #expect(run.link == nil)
         }
         #expect(text[text.range(of: "literal")!][CodeStyleAttribute.self] == "inline")
+    }
+}
+
+extension MarkdownFormattingTests {
+    @MainActor
+    @Test(
+        arguments: ["", "# ", "###### ", "> ", "> ### ", "- ", "1. ", "- [ ] ", "> - "],
+        [
+            "**内容🌿**", "*内容🌿*", "~~内容🌿~~", "`内容🌿`", "***内容🌿***", "~~**内容🌿**~~", "[***内容🌿***](https://example.com)",
+            "[~~内容🌿~~](https://example.com)",
+        ])
+    func nestedRichBlocksSurviveNativeAndMarkdownRoundTrips(block: String, inline: String) throws {
+        let source = MarkdownFormatting.render(block + inline)
+        #expect(String(source.characters) == "内容🌿")
+        let context = EnvironmentValues().fontResolutionContext
+        let native = NativeTextAttributes.native(source, context: context)
+        let bridged = NativeTextAttributes.rich(native)
+        let serialized = MarkdownFormatting.serialize(bridged, context: context)
+        let restored = MarkdownFormatting.render(serialized)
+        #expect(String(restored.characters) == "内容🌿")
+        let original = try #require(source.runs.first)
+        let result = try #require(restored.runs.first)
+        #expect(result[ParagraphStyleAttribute.self] == original[ParagraphStyleAttribute.self])
+        #expect(result[QuoteAttribute.self] == original[QuoteAttribute.self])
+        #expect(result[TaskStateAttribute.self] == original[TaskStateAttribute.self])
+        #expect(result[ListMarkerAttribute.self] == original[ListMarkerAttribute.self])
+        #expect(result.link == original.link)
+        #expect(result.strikethroughStyle == original.strikethroughStyle)
+        #expect(result.font?.resolve(in: context).isBold == original.font?.resolve(in: context).isBold)
+        #expect(result.font?.resolve(in: context).isItalic == original.font?.resolve(in: context).isItalic)
+        #expect(result[CodeStyleAttribute.self] == original[CodeStyleAttribute.self])
+    }
+
+    @MainActor @Test(arguments: ["**加粗**", "*斜体*", "~~删除线~~", "[链接](https://example.com)", "- 列表", "# 标题", "[] 待办"])
+    func codeBlockAndInlineCodeKeepNestedSyntaxLiteral(syntax: String) {
+        let context = EnvironmentValues().fontResolutionContext
+        for markdown in ["```swift\n" + syntax + "\n```", "`" + syntax + "`"] {
+            let source = MarkdownFormatting.render(markdown)
+            #expect(String(source.characters) == syntax)
+            #expect(source.runs.allSatisfy { $0.link == nil && $0.strikethroughStyle == nil })
+            let restored = MarkdownFormatting.render(MarkdownFormatting.serialize(source, context: context))
+            #expect(String(restored.characters) == syntax)
+            #expect(restored.runs.allSatisfy { $0[CodeStyleAttribute.self] != nil })
+        }
+    }
+
+    @MainActor @Test func underlineComposesWithBoldItalicStrikeAndLinkInNativeClipboard() throws {
+        var source = AttributedString("中文🌿")
+        source.font = .body.bold().italic()
+        source.underlineStyle = .single
+        source.strikethroughStyle = .single
+        source.link = URL(string: "https://example.com")
+        source[QuoteAttribute.self] = true
+        source[ParagraphStyleAttribute.self] = "heading:2"
+        let context = EnvironmentValues().fontResolutionContext
+        let bridged = NativeTextAttributes.rich(NativeTextAttributes.native(source, context: context))
+        let restored = try RichTextClipboard.decode(RichTextClipboard.encode(bridged))
+        let run = try #require(restored.runs.first)
+        #expect(run.underlineStyle == .single)
+        #expect(run.strikethroughStyle == .single)
+        #expect(run.font?.resolve(in: context).isBold == true)
+        #expect(run.font?.resolve(in: context).isItalic == true)
+        #expect(run.link == source.link)
+        #expect(run[QuoteAttribute.self] == true)
+        #expect(run[ParagraphStyleAttribute.self] == "heading:2")
     }
 }

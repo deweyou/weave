@@ -28,6 +28,7 @@ struct WeaveApp: App {
     var body: some Scene {
         WindowGroup {
             WorkspaceView(store: store)
+                .tint(AppTheme.accent)
                 .onChange(of: scenePhase) { _, phase in
                     guard phase != .active else { return }
                     Task { await store.flushPendingSave() }

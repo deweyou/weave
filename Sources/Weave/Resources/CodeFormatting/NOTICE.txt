@@ -1,0 +1,5 @@
+Prettier 3.9.9 — https://github.com/prettier/prettier
+Source: https://registry.npmjs.org/prettier/-/prettier-3.9.9.tgz
+Bundled standalone UMD build and parser plugins, unmodified.
+License: PRETTIER-LICENSE; third-party notices: THIRD-PARTY-NOTICES.md.
+Runs offline in JavaScriptCore; user code is parsed, never executed.

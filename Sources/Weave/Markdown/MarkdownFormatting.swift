@@ -66,6 +66,7 @@ enum MarkdownFormatting {
             var style = "body"
             var prefix = ""
             var taskChecked: Bool?
+            var listMarker: String?
             let indentation = String(content.prefix(while: { $0 == " " || $0 == "\t" }))
             let unindented = String(content.dropFirst(indentation.count))
             let listIndentation = String(
@@ -80,11 +81,13 @@ enum MarkdownFormatting {
                 style = "task"
                 taskChecked = !unindented.hasPrefix("- [ ] ")
             } else if ["- ", "* ", "+ "].contains(where: unindented.hasPrefix) {
-                prefix = listIndentation + "• "
+                prefix = listIndentation
+                listMarker = "•"
                 content = String(unindented.dropFirst(2))
                 style = "bullet"
             } else if let range = unindented.range(of: #"^\d+[.)] "#, options: .regularExpression) {
-                prefix = listIndentation + String(unindented[range])
+                prefix = listIndentation
+                listMarker = String(unindented[range]).trimmingCharacters(in: .whitespaces)
                 content = String(unindented[range.upperBound...])
                 style = "numbered"
             }
@@ -104,6 +107,7 @@ enum MarkdownFormatting {
             line[ParagraphStyleAttribute.self] = style
             line[QuoteAttribute.self] = quoted ? true : nil
             line[TaskStateAttribute.self] = taskChecked
+            line[ListMarkerAttribute.self] = listMarker
             paragraphs.append(line)
             index += 1
         }
@@ -118,6 +122,7 @@ enum MarkdownFormatting {
                 let quoted = paragraph.runs.first?[QuoteAttribute.self] == true
                 newline[QuoteAttribute.self] = quoted ? true : nil
                 newline[TaskStateAttribute.self] = paragraph.runs.first?[TaskStateAttribute.self]
+                newline[ListMarkerAttribute.self] = paragraph.runs.first?[ListMarkerAttribute.self]
                 newline[InlineEmphasisAttribute.self] = 0
                 newline.font = ParagraphEditing.font(for: role)
                 // Inline marks must not cover the paragraph break or leak into a blank line.
@@ -131,6 +136,7 @@ enum MarkdownFormatting {
                 result += newline
             }
         }
+        ListMarkerFormatting.normalizeNestedNumbers(in: &result)
         return result
     }
 
@@ -242,6 +248,9 @@ enum MarkdownFormatting {
                 skip = body.hasPrefix("│ ") ? indentation.count + 2 : 0
             } else if style == "task" {
                 prefix = indentation + ((paragraph.runs.first?[TaskStateAttribute.self] ?? false) ? "- [x] " : "- [ ] ")
+                skip = indentation.count
+            } else if let marker = paragraph.runs.first?[ListMarkerAttribute.self], ["bullet", "numbered"].contains(style) {
+                prefix = indentation + (style == "bullet" ? "-" : marker) + " "
                 skip = indentation.count
             } else if body.hasPrefix("• ") || body.hasPrefix("☐ ") || body.hasPrefix("☑ ") {
                 prefix = indentation + (body.hasPrefix("• ") ? "- " : body.hasPrefix("☐ ") ? "- [ ] " : "- [x] ")
