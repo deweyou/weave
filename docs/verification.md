@@ -78,7 +78,7 @@ python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView、MacWorkspaceView、MobileWorkspaceView 和 NativeTableView；桥接组包含 NativeRichTextEditor、NativeTextAttributes 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；当前平台编译的全部文件均计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView、MacWorkspaceView、MobileWorkspaceView 、NativeTableView 和 Toast；ToastPresenter 仍归入核心逻辑组。桥接组包含 NativeRichTextEditor、NativeTextAttributes 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；当前平台编译的全部文件均计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
 
 Package 单测运行在 Mac，覆盖率脚本默认 `--platform macos`：明确列出且排除整个文件受 `#if os(iOS)` 包裹的 `App/MobileWorkspaceView.swift`；`--platform ios` 对应排除 Mac 专属工作区文件。平台专属映射以完整相对路径列举，其他新增文件仍须有报告。移动端工作区行为由 iOS UI 测试验证，不能将 Mac 单测覆盖率当作它的覆盖率。
 
@@ -191,3 +191,5 @@ Toast 验证：格式化语法错误与复制写入失败走同一页面出口�
 Toast 的 Mac 实际验收：格式化失败显示底部玻璃浮层，无操作后自动消失；查看详情超过 4 秒仍保持显示；提示出现时原正文光标继续输入成功，测试输入已撤销。复制失败经可注入剪贴板返回值测试验证共用出口；没有人为破坏系统剪贴板制造失败。229 项测试和 Mac/iOS 构建通过；移动端、VoiceOver、辅助显示设置实际表现仍待设备验收。
 
 Toast 光标回归：`PointerRegionTests` 在同窗口叠放正文与按钮区域，验证原生 cursorUpdate / mouseMoved 后仍为 pointingHand、区域不拦截点击，隐藏或移除后恢复 iBeam。Mac/iOS 构建已通过。工具能操作 Toast，但此次坐标交互返回 noWindowsAvailable，截图未能提供真实悬停光标证据；实际手型外观仍待用户鼠标验收，不能将此原生事件测试写成真实悬停已验证。
+
+链接悬停自动化分别注入普通动画与减少动态效果偏好，避免依赖 CI 主机的辅助功能设置；颜色比较使用同色域 RGBA 分量，允许平台颜色对象的 HDR 元数据不同。真实辅助功能体验仍需设备验证。

@@ -576,6 +576,7 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         }
         private var linkTransitions: [NSRange: LinkTransition] = [:]
         private var linkAnimation: LinkHoverAnimation?
+        var shouldReduceLinkHoverMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
         var hoveredLinkRange: NSRange? {
             didSet {
                 guard hoveredLinkRange != oldValue else { return }
@@ -590,7 +591,7 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
                     let value = linkTransitions[range]?.value ?? 0
                     linkTransitions[range] = LinkTransition(value: value, start: value, target: 1)
                 }
-                guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+                guard !shouldReduceLinkHoverMotion() else {
                     updateLinkHoverAnimation(progress: 1)
                     return
                 }

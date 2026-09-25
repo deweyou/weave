@@ -57,6 +57,18 @@ class CoverageGateTests(unittest.TestCase):
         self.entries[2]["summary"]["lines"]["count"] = 1000
         self.assertFalse(evaluate(self.report(), self.root)[0])
 
+    def test_toast_view_and_presenter_keep_separate_coverage_contracts(self):
+        for name, count, covered in [("Toast.swift", 10, 0), ("ToastPresenter.swift", 100, 100)]:
+            path = self.root / name
+            path.touch()
+            self.entries.append({"filename": str(path), "summary": {"lines": {"count": count, "covered": covered}}})
+        self.assertTrue(evaluate(self.report(), self.root)[0])
+        self.entries[-1]["summary"]["lines"]["covered"] = 0
+        self.assertFalse(evaluate(self.report(), self.root)[0])
+        self.entries[-1]["summary"]["lines"]["covered"] = 100
+        self.entries[-2]["summary"]["lines"]["count"] = 1000
+        self.assertFalse(evaluate(self.report(), self.root)[0])
+
     def test_rejects_duplicate_entries(self):
         self.entries.append(self.entries[0])
         with self.assertRaises(ValueError):

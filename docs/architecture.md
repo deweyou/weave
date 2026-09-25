@@ -6,7 +6,8 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| `Sources/Weave/App/Toast.swift` | 页面级短暂反馈消息、状态与 Liquid Glass 浮层；生命周期由 SwiftUI task 管理 |
+| `Sources/Weave/App/ToastPresenter.swift` | 页面级短暂反馈消息、替换与关闭状态 |
+| `Sources/Weave/App/Toast.swift` | Liquid Glass 反馈浮层；生命周期由 SwiftUI task 管理 |
 | `Sources/Weave/App/AppTheme.swift` | SwiftUI 与原生绘制共用的主题色，默认系统蓝；不属于文档持久化属性 |
 | `Sources/Weave/App/WeaveApp.swift` | 生命周期、存储实例、Mac 新建命令 |
 | `Sources/Weave/App/WorkspaceView.swift` | 平台入口、共享记录瀑布流、记录编辑器及格式菜单 |

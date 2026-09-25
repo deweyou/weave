@@ -406,9 +406,13 @@ import Testing
                 layout.layoutManager(
                     layout, shouldUseTemporaryAttributes: NativeTextAttributes.linkTextAttributes,
                     forDrawingToScreen: true, atCharacterIndex: 1, effectiveRange: &range))
-            #expect(
-                (attributes[.foregroundColor] as? NSColor)?.usingColorSpace(.deviceRGB) == AppTheme.nativeAccent.usingColorSpace(.deviceRGB)
-            )
+            let actual = try #require((attributes[.foregroundColor] as? NSColor)?.usingColorSpace(.deviceRGB))
+            let expected = try #require(AppTheme.nativeAccent.usingColorSpace(.deviceRGB))
+            // Color objects may differ in HDR metadata while rendering the same RGBA components.
+            #expect(abs(actual.redComponent - expected.redComponent) < 0.0001)
+            #expect(abs(actual.greenComponent - expected.greenComponent) < 0.0001)
+            #expect(abs(actual.blueComponent - expected.blueComponent) < 0.0001)
+            #expect(abs(actual.alphaComponent - expected.alphaComponent) < 0.0001)
             #expect(attributes[.underlineStyle] as? Int == NSUnderlineStyle.single.rawValue)
             #expect(range == NSRange(location: 0, length: 4))
             let other = layout.layoutManager(
@@ -428,6 +432,7 @@ import Testing
         @Test @MainActor func linkHoverReversesFromCurrentColorAndClearsAfterEditing() throws {
             let storage = NSTextStorage(string: "链接", attributes: [.link: "https://example.com", .foregroundColor: NSColor.labelColor])
             let layout = CodeLayoutManager()
+            layout.shouldReduceLinkHoverMotion = { false }
             storage.addLayoutManager(layout)
             let range = NSRange(location: 0, length: 2)
             func color() -> NSColor? {
@@ -449,6 +454,25 @@ import Testing
             layout.clearLinkHover()
             #expect(color() == nil)
             #expect(layout.hoveredLinkRange == nil)
+            #expect(storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == NSColor.labelColor)
+        }
+
+        @Test @MainActor func reducedMotionLinkHoverImmediatelyEntersAndLeaves() throws {
+            let storage = NSTextStorage(string: "链接", attributes: [.link: "https://example.com", .foregroundColor: NSColor.labelColor])
+            let layout = CodeLayoutManager()
+            layout.shouldReduceLinkHoverMotion = { true }
+            storage.addLayoutManager(layout)
+            func color() -> NSColor? {
+                layout.layoutManager(
+                    layout, shouldUseTemporaryAttributes: [:], forDrawingToScreen: true,
+                    atCharacterIndex: 0, effectiveRange: nil)?[.foregroundColor] as? NSColor
+            }
+            layout.hoveredLinkRange = NSRange(location: 0, length: 2)
+            let entered = try #require(color())
+            layout.updateLinkHoverAnimation(progress: 1)
+            #expect(color() == entered)
+            layout.hoveredLinkRange = nil
+            #expect(color() == nil)
             #expect(storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == NSColor.labelColor)
         }
 
