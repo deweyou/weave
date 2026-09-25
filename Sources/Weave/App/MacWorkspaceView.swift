@@ -236,6 +236,9 @@
             Label(label, systemImage: symbol)
                 .lineLimit(1)
                 .tag(WorkspaceDestination.location(location))
+                .contentShape(Rectangle())
+                // List does not write its selection again when the selected row is clicked.
+                .simultaneousGesture(TapGesture().onEnded { navigation.browse(location) })
         }
 
         @ViewBuilder private var detail: some View {

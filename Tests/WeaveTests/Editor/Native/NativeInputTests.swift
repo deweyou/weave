@@ -816,6 +816,34 @@
             #expect(view.string == original)
         }
 
+        @Test func codeIndentUndoRedoKeepsCaretBeforeTheOpenTrailingLine() throws {
+            let (view, coordinator) = editor(AttributedString("```swift"))
+            view.delegate = coordinator
+            let window = NSWindow(contentRect: view.frame, styleMask: .titled, backing: .buffered, defer: false)
+            window.contentView = view
+            view.allowsUndo = true
+            #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\n"))
+            view.insertText("let value = 42", replacementRange: view.selectedRange())
+            let undo = try #require(view.undoManager)
+            undo.removeAllActions()
+            undo.beginUndoGrouping()
+            #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\t"))
+            undo.endUndoGrouping()
+            #expect(view.selectedRange() == NSRange(location: 16, length: 0))
+            undo.undo()
+            #expect(view.selectedRange() == NSRange(location: 14, length: 0))
+            undo.redo()
+            #expect(view.selectedRange() == NSRange(location: 16, length: 0))
+            #expect(view.string == "  let value = 42\n")
+            #expect(view.typingAttributes[.weaveCodeLanguage] as? String == "swift")
+            #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\n"))
+            #expect(view.string == "  let value = 42\n  \n")
+            #expect(view.selectedRange() == NSRange(location: 19, length: 0))
+            view.insertText("next", replacementRange: view.selectedRange())
+            #expect(view.string == "  let value = 42\n  next\n")
+            #expect(view.typingAttributes[.weaveCodeLanguage] as? String == "swift")
+        }
+
         @Test func codeNewlineContinuesIndentAndBlankIndentExits() {
             let (view, coordinator) = editor(MarkdownFormatting.render("```python\n    return 1\n```"))
             #expect(!coordinator.intercept(range: view.selectedRange(), replacement: "\n"))

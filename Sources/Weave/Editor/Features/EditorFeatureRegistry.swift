@@ -31,7 +31,7 @@ struct EditorInputContext {
         let isTerminalEmptyParagraph =
             replacement == "\n" && range.length == 0
             && source.length > 0 && source.hasSuffix("\n")
-            && range.location >= source.length - 1
+            && range.location == source.length
         let paragraphAnchor = isTerminalEmptyParagraph ? source.length : min(range.location, source.length)
         if paragraphAnchor == source.length, source.length > 0,
             source.substring(with: NSRange(location: source.length - 1, length: 1)) == "\n"
