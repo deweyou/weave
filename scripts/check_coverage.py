@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Gate LLVM line coverage. Every app source participates in the overall gate."""
+"""Gate LLVM line coverage for all app sources compiled on the selected platform."""
 import argparse
 import json
 import sys
 from pathlib import Path
 
 # UI declarations are covered by XCUITest separately; never hide them in totals.
-UI_FILES = {"WeaveApp.swift", "WorkspaceView.swift", "NativeTableView.swift"}
+UI_FILES = {"WeaveApp.swift", "WorkspaceView.swift", "MacWorkspaceView.swift", "MobileWorkspaceView.swift", "NativeTableView.swift"}
 BRIDGE_FILES = {"NativeRichTextEditor.swift", "NativeTextAttributes.swift", "NativeTableOverlay.swift"}
 THRESHOLDS = {"all": 35.0, "core": 90.0, "bridge": 55.0}
+PLATFORM_ONLY = {"App/MobileWorkspaceView.swift": "ios", "App/MacWorkspaceView.swift": "macos"}
 
 
-def evaluate(report, source_root):
+def evaluate(report, source_root, platform="macos"):
     source_root = source_root.resolve()
-    expected = {p.resolve() for p in source_root.rglob("*.swift")}
+    sources = {p.resolve() for p in source_root.rglob("*.swift")}
+    excluded = {p for p in sources if PLATFORM_ONLY.get(p.relative_to(source_root).as_posix(), platform) != platform}
+    expected = sources - excluded
     if not expected:
         raise ValueError("No Swift sources found")
     found = {}
@@ -47,17 +50,19 @@ def evaluate(report, source_root):
         rows.append(f"| {name} | {covered}/{count} | {percent:.2f}% | {threshold:.0f}% | {'PASS' if percent >= threshold else 'FAIL'} |")
     for path, (covered, count) in sorted(found.items()):
         rows.append(f"| {path.name} | {covered}/{count} | {covered * 100 / count:.2f}% | — | — |")
-    return passed, "\n".join(["# Unit test line coverage", "", "| Scope | Lines | Coverage | Minimum | Status |", "| --- | --- | --- | --- | --- |", *rows, ""])
+    exclusions = [f"Not compiled on {platform}: {p.relative_to(source_root)}" for p in sorted(excluded)]
+    return passed, "\n".join(["# Unit test line coverage", "", *exclusions, "", "| Scope | Lines | Coverage | Minimum | Status |", "| --- | --- | --- | --- | --- |", *rows, ""])
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("report", type=Path)
     parser.add_argument("--sources", type=Path, default=Path("Sources/Weave"))
+    parser.add_argument("--platform", choices=["macos", "ios"], default="macos")
     parser.add_argument("--output", type=Path, default=Path(".build/coverage-summary.md"))
     args = parser.parse_args()
     try:
-        passed, summary = evaluate(json.loads(args.report.read_text()), args.sources)
+        passed, summary = evaluate(json.loads(args.report.read_text()), args.sources, args.platform)
     except (ValueError, KeyError, TypeError, OSError) as error:
         parser.exit(1, f"Coverage failed: {error}\n")
     args.output.parent.mkdir(parents=True, exist_ok=True)

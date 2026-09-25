@@ -34,6 +34,21 @@ class CoverageGateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             evaluate(self.report(), self.root)
 
+    def test_ios_only_workspace_is_explicitly_reported_on_mac(self):
+        (self.root / "App").mkdir()
+        (self.root / "App/MobileWorkspaceView.swift").touch()
+        passed, summary = evaluate(self.report(), self.root)
+        self.assertTrue(passed)
+        self.assertIn("Not compiled on macos: App/MobileWorkspaceView.swift", summary)
+        with self.assertRaises(ValueError):
+            evaluate(self.report(), self.root, "ios")
+
+    def test_mac_workspace_still_requires_coverage_on_mac(self):
+        (self.root / "App").mkdir()
+        (self.root / "App/MacWorkspaceView.swift").touch()
+        with self.assertRaises(ValueError):
+            evaluate(self.report(), self.root)
+
     def test_rejects_empty_report(self):
         with self.assertRaises(ValueError):
             evaluate({"data": []}, self.root)

@@ -60,7 +60,9 @@ python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView 和 NativeTableView；桥接组包含 NativeRichTextEditor、NativeTextAttributes 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；所有文件都计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView、MacWorkspaceView、MobileWorkspaceView 和 NativeTableView；桥接组包含 NativeRichTextEditor、NativeTextAttributes 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；当前平台编译的全部文件均计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+
+Package 单测运行在 Mac，覆盖率脚本默认 `--platform macos`：明确列出且排除整个文件受 `#if os(iOS)` 包裹的 `App/MobileWorkspaceView.swift`；`--platform ios` 对应排除 Mac 专属工作区文件。平台专属映射以完整相对路径列举，其他新增文件仍须有报告。移动端工作区行为由 iOS UI 测试验证，不能将 Mac 单测覆盖率当作它的覆盖率。
 
 当前覆盖率来自单测，不混入 UI 执行数据；不提供分支覆盖率或新增行覆盖率门禁。UI 测试通过是独立检查，也不等于截图像素回归通过。
 
@@ -74,3 +76,27 @@ xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Sim
 添加 `-resultBundlePath` 可保存到尚不存在的 `.xcresult` 路径。Mac UI 测试需要可用桌面与测试自动化权限，会操作测试 App。CI 使用临时宿主；本地不在操作其他 App 时混跑 UI 测试。
 
 每个 UI 测试通过 Debug 专用 `WEAVE_UI_TEST_SESSION` UUID 使用独立的 Application Support/WeaveUITests 子目录；重启同一测试继续读取相同数据，不使用或清理真实 Weave/notes.json。Release 不读取该变量。测试以稳定 accessibilityIdentifier 查找控件；Mac 小屏幕会把工具栏动作收进溢出菜单，首次新建通过空状态主按钮完成，不假设工具栏动作始终可见。截图和文本断言只证明所覆盖场景；真实中文候选、富文本视觉和触控仍按上面的矩阵验证。
+
+## Mac 工作区布局回归
+
+使用隔离 UUID 存储，检查：空库创建分类 → 分类内新建笔记 → 输入标题和正文 → 返回列表 → 全部记录视图 → 搜索标题/正文与无结果 → 移到未分类 → 重启。核对正文与空分类均恢复。分类名称和展开箭头分别验证浏览/展开行为，Command-N 使用当前窗口分类，任务入口显示规划状态。
+
+窗口缩放与侧栏显隐时检查选区、正文和滚动；保存失败须在列表和编辑区均有重试入口。新布局不替代编辑器既有输入、撤销、Markdown、表格与中文组合态验收。
+
+`testMacLibraryFoldersAndSearch` 覆盖主要组织流程，存储测试覆盖旧数组迁移、新快照、空分类与异常数据保护。UI 测试如与用户正在运行的 App 共存，使用独立构建目录及独立 `PRODUCT_BUNDLE_IDENTIFIER`，避免测试启动终止用户实例。浅深色、VoiceOver、真实中文输入法和移动端新导航需要各自操作证据，不能由本轮编译结果推断。
+
+## iOS / iPadOS 工作区回归
+
+检查分类、笔记列表、编辑之间的点击返回和边缘返回手势；分类内新建、移动、搜索、分类重命名与重启恢复。任务页应能返回笔记导航。
+
+iPad 宽窗口检查侧栏与内容同时显示；编辑时旋转、调整窗口宽度和隐藏侧栏，核对笔记、选区与滚动位置。单一视图树不等于所有状态已验收。软键盘打开时检查正文和工具栏可达。
+
+`testMobileLibraryOrganizationAndRestoration` 覆盖分类内新建、编辑、移动与重启；编辑恢复测试在紧凑模式从全部记录进入。`testMobileSearchAndReturn` 覆盖正文搜索、无结果、打开结果及退出搜索后返回总览；`testIPadEditorSurvivesRotation` 在 iPad 验证旋转后正文保留、侧栏可达与继续输入。iPhone 与 iPad 操作分别记录证据，旋转测试不替代分屏缩放、选区与滚动位置的手动验证。
+
+## 记录卡片回归
+
+Mac、iPhone 与 iPad 检查记录首页和分类均使用卡片；点击「记录」回到全部内容，按最近编辑排序。检查无标题、长标题、长正文、空分类和搜索无结果；打开卡片再返回应保留筛选与滚动定位。移动端长按卡片或编辑页菜单完成移动，不再依赖列表轻扫。
+
+瀑布流回归：混合一句话、长标题、无标题、清单和千字长文，检查高度上下限、摘要截断、日期不被挤出；缩放窗口跨越一/二/三列边界时无重叠或横向溢出。`RecordMasonryLayoutTests` 检查最短列填充和多种宽度下的边界与不重叠；实际文字高度、滚动返回、触控和大字号仍需对应平台检查。
+
+收藏能力已移除，不提供收藏入口、卡片星标或操作。

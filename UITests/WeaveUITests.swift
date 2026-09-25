@@ -67,6 +67,76 @@ final class WeaveUITests: XCTestCase {
     }
 
     #if os(macOS)
+        private func recordCard(titled title: String) -> XCUIElement {
+            app.buttons.matching(
+                NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "note-row-", title)
+            ).firstMatch
+        }
+
+        func testMacRecordGalleryAndReturn() {
+            newNote()
+            app.textFields["note-title"].tap()
+            app.textFields["note-title"].typeText("Gallery record\n")
+            editor.typeText("A quick thought for the gallery")
+            app.buttons["back-to-notes"].tap()
+            XCTAssertTrue(app.scrollViews["record-gallery"].waitForExistence(timeout: 5))
+            let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "note-row-")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 5))
+            card.tap()
+            expectText("A quick thought for the gallery")
+            app.buttons["back-to-notes"].tap()
+            let search = app.searchFields.firstMatch
+            search.tap()
+            search.typeText("thought")
+            XCTAssertTrue(card.exists)
+            search.typeText(" missing")
+            XCTAssertFalse(card.exists)
+            app.staticTexts["workspace-notes"].firstMatch.tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 5))
+        }
+
+        func testMacLibraryFoldersAndSearch() {
+            app.buttons["new-folder"].tap()
+            let field = app.textFields["分类名称"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.typeText("Layout category")
+            app.buttons["保存"].tap()
+            newNote()
+            let title = app.textFields["note-title"]
+            title.tap()
+            title.typeText("Layout note")
+            title.typeText("\n")
+            editor.typeText("Content search token")
+            app.buttons["back-to-notes"].tap()
+            XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
+            app.staticTexts["全部记录"].firstMatch.tap()
+            XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
+            XCTAssertTrue(app.scrollViews["record-gallery"].exists)
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5))
+            search.tap()
+            search.typeText("search token")
+            XCTAssertTrue(recordCard(titled: "Layout note").exists)
+            search.typeText(" missing")
+            XCTAssertFalse(recordCard(titled: "Layout note").exists)
+            app.staticTexts["全部记录"].firstMatch.tap()
+            recordCard(titled: "Layout note").tap()
+            app.menuButtons["organize-note"].tap()
+            app.menuItems["移动到分类"].tap()
+            app.menuItems["未分类"].tap()
+            app.buttons["back-to-notes"].tap()
+            app.staticTexts["未分类"].firstMatch.tap()
+            XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
+            app.terminate()
+            app.launch()
+            app.staticTexts["全部记录"].firstMatch.tap()
+            recordCard(titled: "Layout note").tap()
+            expectText("Content search token")
+            app.buttons["back-to-notes"].tap()
+            app.staticTexts["Layout category"].firstMatch.tap()
+            XCTAssertTrue(app.buttons["empty-new-note"].waitForExistence(timeout: 5))
+        }
+
         private func copiedMarkdown() -> String {
             let pasteboard = NSPasteboard.general
             let previousChangeCount = pasteboard.changeCount
@@ -93,12 +163,15 @@ final class WeaveUITests: XCTestCase {
         expectText("A persistent note\nSecond line")
         app.terminate()
         app.launch()
-        #if os(iOS)
-            // Compact navigation starts on the list after relaunch.
-            if !editor.waitForExistence(timeout: 2) {
+        // Both workspaces reopen on their library after relaunch.
+        if !editor.waitForExistence(timeout: 2) {
+            #if os(iOS)
+                app.buttons["全部记录"].firstMatch.tap()
                 app.staticTexts[titleText].firstMatch.tap()
-            }
-        #endif
+            #else
+                recordCard(titled: titleText).tap()
+            #endif
+        }
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
         expectText("A persistent note\nSecond line")
         XCTAssertEqual(app.textFields["note-title"].value as? String, titleText)
@@ -124,6 +197,86 @@ final class WeaveUITests: XCTestCase {
         editor.typeText("First task")
         expectText("First task")
     }
+
+    #if os(iOS)
+        func testIPadEditorSurvivesRotation() throws {
+            guard UIDevice.current.userInterfaceIdiom == .pad else { throw XCTSkip("iPad window scenario") }
+            app.buttons["workspace-notes"].firstMatch.tap()
+            app.buttons["empty-new-note"].tap()
+            XCTAssertTrue(editor.waitForExistence(timeout: 5))
+            editor.tap()
+            editor.typeText("Keep this editor through rotation")
+            XCUIDevice.shared.orientation = .landscapeLeft
+            expectText("Keep this editor through rotation")
+            XCTAssertTrue(app.buttons["workspace-notes"].isHittable)
+            editor.typeText(" continued")
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = "iPad wide editor"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCUIDevice.shared.orientation = .portrait
+            expectText("Keep this editor through rotation continued")
+        }
+
+        func testMobileSearchAndReturn() {
+            app.buttons["全部记录"].firstMatch.tap()
+            app.buttons["empty-new-note"].tap()
+            XCTAssertTrue(editor.waitForExistence(timeout: 5))
+            app.textFields["note-title"].tap()
+            app.textFields["note-title"].typeText("Searchable note\n")
+            editor.tap()
+            editor.typeText("Distinctive body token")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5))
+            search.tap()
+            search.typeText("Distinctive")
+            XCTAssertTrue(app.staticTexts["Searchable note"].exists)
+            search.typeText("zzz")
+            XCTAssertFalse(app.staticTexts["Searchable note"].exists)
+            search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 3))
+            app.staticTexts["Searchable note"].tap()
+            expectText("Distinctive body token")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            let cancelSearch = app.buttons.matching(
+                NSPredicate(format: "label IN %@", ["关闭", "Close", "取消", "Cancel"])
+            ).firstMatch
+            XCTAssertTrue(cancelSearch.waitForExistence(timeout: 5))
+            cancelSearch.tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.buttons["workspace-tasks"].waitForExistence(timeout: 5))
+            app.buttons["workspace-tasks"].tap()
+            XCTAssertTrue(app.staticTexts["任务稍后推出"].waitForExistence(timeout: 5))
+        }
+
+        func testMobileLibraryOrganizationAndRestoration() {
+            app.buttons["new-folder"].tap()
+            let name = app.alerts.textFields.firstMatch
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            name.typeText("Mobile folder")
+            app.alerts.buttons["保存"].tap()
+            app.buttons["empty-new-note"].tap()
+            XCTAssertTrue(editor.waitForExistence(timeout: 5))
+            let title = app.textFields["note-title"]
+            title.tap()
+            title.typeText("Mobile note\n")
+            editor.tap()
+            editor.typeText("Persistent mobile content")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.staticTexts["Mobile note"].waitForExistence(timeout: 5))
+            app.staticTexts["Mobile note"].tap()
+            app.buttons["organize-note"].tap()
+            app.buttons["移动到分类"].tap()
+            app.buttons["未分类"].tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.buttons["empty-new-note"].waitForExistence(timeout: 5))
+            app.terminate()
+            app.launch()
+            app.buttons["全部记录"].firstMatch.tap()
+            app.staticTexts["Mobile note"].tap()
+            expectText("Persistent mobile content")
+        }
+    #endif
 
     #if os(iOS)
         func testTableTouchEditingAndReturnToDocument() {
@@ -256,6 +409,7 @@ final class WeaveUITests: XCTestCase {
             XCTAssertTrue(markdown.hasSuffix("After table"))
             app.terminate()
             app.launch()
+            app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "note-row-")).firstMatch.tap()
             XCTAssertTrue(first.waitForExistence(timeout: 5))
             XCTAssertEqual(first.value as? String, "Name")
             XCTAssertEqual(app.textFields["table-cell-1-0"].value as? String, "Alpha")

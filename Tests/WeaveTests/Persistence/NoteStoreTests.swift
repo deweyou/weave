@@ -273,6 +273,122 @@ struct NoteStoreTests {
         #expect(stable == migrated)
     }
 
+    @Test func foldersPersistWithoutChangingRichText() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore(directory: directory)
+        let folderID = try #require(store.createFolder(name: "  工作  "))
+        let emptyID = try #require(store.createFolder(name: "空分类"))
+        let body = MarkdownFormatting.render("# 正文\n\n**重点中文** 🌊\n\n- [x] 完成")
+        store.createNote(title: "独立标题", richText: body, folderID: folderID)
+        let note = try #require(store.notes.first)
+        store.renameFolder(id: folderID, name: "  工作资料\n")
+        await store.flushPendingSave()
+
+        let restored = NoteStore(directory: directory)
+        #expect(restored.loadError == nil)
+        #expect(restored.folders == [NoteFolder(id: folderID, name: "工作资料"), NoteFolder(id: emptyID, name: "空分类")])
+        #expect(restored.notes.first?.folderID == folderID)
+        #expect(restored.notes.first?.richText == body)
+        #expect(restored.notes.first?.updatedAt == note.updatedAt)
+        restored.moveNote(id: note.id, to: nil)
+        await restored.flushPendingSave()
+        let moved = NoteStore(directory: directory)
+        #expect(moved.notes.first?.folderID == nil)
+        #expect(moved.folders == restored.folders)
+        #expect(moved.notes.first?.richText == body)
+    }
+
+    @Test func organizationRejectsEmptyNamesAndUnknownTargets() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore(directory: directory)
+        #expect(store.createFolder(name: " \n\t") == nil)
+        let folderID = try #require(store.createFolder(name: "分类"))
+        store.createNote(folderID: folderID)
+        let id = try #require(store.selectedID)
+        store.renameFolder(id: folderID, name: " ")
+        store.moveNote(id: id, to: UUID())
+        store.createNote(folderID: UUID())
+        #expect(store.folders.first?.name == "分类")
+        #expect(store.notes.count == 1)
+        #expect(store.notes.first?.folderID == folderID)
+        await store.flushPendingSave()
+        #expect(NoteStore(directory: directory).notes == store.notes)
+    }
+
+    @Test func legacyArrayUpgradesOnMutationWithDefaultOrganization() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("notes.json")
+        var original = Note(id: UUID(), text: "", createdAt: .now, updatedAt: .now, title: "已有标题")
+        original.richText = MarkdownFormatting.render("**已有格式**\n\n正文")
+        var legacy = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
+        legacy.removeValue(forKey: "folderID")
+        legacy["isFavorite"] = true  // Retired fields must not prevent reading existing records.
+        let originalBytes = try JSONSerialization.data(withJSONObject: [legacy])
+        try originalBytes.write(to: file)
+        let store = NoteStore(directory: directory)
+        #expect(store.notes == [original])
+        #expect(store.folders.isEmpty)
+        #expect(try Data(contentsOf: file) == originalBytes)
+        let folderID = try #require(store.createFolder(name: "归档"))
+        store.moveNote(id: original.id, to: folderID)
+        await store.flushPendingSave()
+        let encoded = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        #expect(encoded["version"] as? Int == 1)
+        let savedNotes = try #require(encoded["notes"] as? [[String: Any]])
+        #expect(savedNotes.allSatisfy { $0["isFavorite"] == nil })
+        let restored = NoteStore(directory: directory)
+        #expect(restored.notes == store.notes)
+        #expect(restored.notes.first?.richText == original.richText)
+        #expect(restored.notes.first?.createdAt == original.createdAt)
+        #expect(restored.notes.first?.updatedAt == original.updatedAt)
+    }
+
+    @Test func invalidLibrariesBlockAllOrganizationMutations() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("notes.json")
+        let folderID = UUID()
+        let note = Note(id: UUID(), text: "保护内容", createdAt: .now, updatedAt: .now, folderID: folderID)
+        let encodedNote = try JSONSerialization.jsonObject(with: JSONEncoder().encode(note))
+        let folder: [String: Any] = ["id": folderID.uuidString, "name": "分类"]
+        let fixtures: [[String: Any]] = [
+            ["version": 99, "folders": [], "notes": []],
+            ["version": 1, "notes": []],
+            ["version": 1, "folders": [], "notes": [encodedNote]],
+            ["version": 1, "folders": [folder, folder], "notes": [encodedNote]],
+            ["version": 1, "folders": [folder], "notes": [encodedNote, encodedNote]],
+        ]
+        for fixture in fixtures {
+            let bytes = try JSONSerialization.data(withJSONObject: fixture)
+            try bytes.write(to: file)
+            let store = NoteStore(directory: directory)
+            #expect(store.loadError != nil)
+            #expect(store.createFolder(name: "不能覆盖") == nil)
+            store.renameFolder(id: folderID, name: "不能覆盖")
+            store.moveNote(id: note.id, to: nil)
+            store.createNote()
+            store.retrySave()
+            await store.flushPendingSave()
+            #expect(try Data(contentsOf: file) == bytes)
+        }
+    }
+
+    @Test func emptyFolderLibrarySurvivesRestartWithoutNotes() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore(directory: directory)
+        let id = try #require(store.createFolder(name: "稍后整理"))
+        await store.flushPendingSave()
+        let restored = NoteStore(directory: directory)
+        #expect(restored.notes.isEmpty)
+        #expect(restored.folders == [NoteFolder(id: id, name: "稍后整理")])
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("WeaveTests-\(UUID().uuidString)", isDirectory: true)
     }
