@@ -134,7 +134,9 @@ final class WeaveUITests: XCTestCase {
             recordCard(titled: "Layout note").tap()
             expectText("Content search token")
             app.buttons["back-to-notes"].tap()
-            app.staticTexts["Layout category"].firstMatch.tap()
+            let restoredFolder = app.staticTexts.matching(NSPredicate(format: "label == %@", "Layout category")).firstMatch
+            XCTAssertTrue(restoredFolder.waitForExistence(timeout: 5))
+            restoredFolder.tap()
             XCTAssertTrue(app.buttons["empty-new-note"].waitForExistence(timeout: 5))
         }
 
@@ -471,7 +473,9 @@ final class WeaveUITests: XCTestCase {
             editor.typeText("\n")
             editor.typeText("let value = 42")
             expectText("let value = 42\n")
-            XCTAssertTrue(app.menuButtons["code-language"].waitForExistence(timeout: 5))
+            // SwiftUI exposes the menu title and disclosure chevron as two AX menu buttons.
+            let languageMenu = app.menuButtons["code-language"].firstMatch
+            XCTAssertTrue(languageMenu.waitForExistence(timeout: 5))
             app.typeKey(.tab, modifierFlags: [])
             expectText("  let value = 42\n")
             app.typeKey("z", modifierFlags: .command)
@@ -483,7 +487,7 @@ final class WeaveUITests: XCTestCase {
             expectText("  let value = 42\n  next\n")
             app.buttons["copy-code"].tap()
             XCTAssertEqual(NSPasteboard.general.string(forType: .string), "  let value = 42\n  next\n")
-            app.menuButtons["code-language"].tap()
+            languageMenu.tap()
             app.menuItems["Python"].tap()
             app.menuButtons["Markdown"].tap()
             app.menuItems["copy-markdown"].tap()
