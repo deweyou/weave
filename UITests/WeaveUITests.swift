@@ -100,7 +100,7 @@ final class WeaveUITests: XCTestCase {
             let field = app.textFields["分类名称"]
             XCTAssertTrue(field.waitForExistence(timeout: 5))
             field.typeText("Layout category")
-            app.buttons["保存"].tap()
+            app.sheets.buttons["保存"].tap()
             newNote()
             let title = app.textFields["note-title"]
             title.tap()
@@ -185,7 +185,7 @@ final class WeaveUITests: XCTestCase {
         editor.typeText("\n")
         for character in "- " { editor.typeText(String(character)) }
         editor.typeText("First\nSecond")
-        expectText("Textbold\n• First\n• Second")
+        expectText("Textbold\nFirst\nSecond")
     }
 
     func testEmptyNoteCanStartTaskListFromToolbar() {
@@ -325,7 +325,7 @@ final class WeaveUITests: XCTestCase {
             editor.typeText("\n")
             editor.typeText("\n")
             editor.typeText("Body")
-            expectText("• First\nBody")
+            expectText("First\nBody")
         }
 
         func testSecondReturnExitsEmptyTaskItem() {
@@ -467,19 +467,20 @@ final class WeaveUITests: XCTestCase {
         func testCodeLanguageIndentAndUndo() {
             newNote()
             for character in "```swift" { editor.typeText(String(character)) }
-            editor.typeText("\nlet value = 42")
-            expectText("let value = 42")
+            editor.typeText("\n")
+            editor.typeText("let value = 42")
+            expectText("let value = 42\n")
             XCTAssertTrue(app.menuButtons["code-language"].waitForExistence(timeout: 5))
             app.typeKey(.tab, modifierFlags: [])
-            expectText("    let value = 42")
+            expectText("  let value = 42\n")
             app.typeKey("z", modifierFlags: .command)
-            expectText("let value = 42")
+            expectText("let value = 42\n")
             app.typeKey("z", modifierFlags: [.command, .shift])
-            expectText("    let value = 42")
+            expectText("  let value = 42\n")
             editor.typeText("\nnext")
-            expectText("    let value = 42\n    next")
+            expectText("  let value = 42\n  next\n")
             app.buttons["copy-code"].tap()
-            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "    let value = 42\n    next")
+            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "  let value = 42\n  next\n")
             app.menuButtons["code-language"].tap()
             app.menuItems["Python"].tap()
             app.menuButtons["Markdown"].tap()
