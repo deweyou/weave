@@ -195,6 +195,7 @@
                                 }
                             } label: {
                                 locationRow(folder.name, symbol: "folder", location: .folder(folder.id))
+                                    .accessibilityIdentifier("folder-row-\(folder.id)")
                                     .contextMenu {
                                         Button("重命名…") {
                                             editingFolderID = folder.id

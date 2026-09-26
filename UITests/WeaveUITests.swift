@@ -101,6 +101,11 @@ final class WeaveUITests: XCTestCase {
             XCTAssertTrue(field.waitForExistence(timeout: 5))
             field.typeText("Layout category")
             app.sheets.buttons["保存"].tap()
+            let createdFolder = app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "folder-row-")
+            ).firstMatch
+            XCTAssertTrue(createdFolder.waitForExistence(timeout: 5))
+            let folderIdentifier = createdFolder.identifier
             newNote()
             let title = app.textFields["note-title"]
             title.tap()
@@ -134,7 +139,7 @@ final class WeaveUITests: XCTestCase {
             recordCard(titled: "Layout note").tap()
             expectText("Content search token")
             app.buttons["back-to-notes"].tap()
-            let restoredFolder = app.staticTexts.matching(NSPredicate(format: "label == %@", "Layout category")).firstMatch
+            let restoredFolder = app.descendants(matching: .any).matching(identifier: folderIdentifier).firstMatch
             XCTAssertTrue(restoredFolder.waitForExistence(timeout: 5))
             restoredFolder.tap()
             XCTAssertTrue(app.buttons["empty-new-note"].waitForExistence(timeout: 5))
