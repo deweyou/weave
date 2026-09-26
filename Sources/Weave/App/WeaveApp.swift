@@ -5,6 +5,10 @@ struct WeaveApp: App {
     @State private var store: NoteStore
     @Environment(\.scenePhase) private var scenePhase
 
+    #if os(macOS)
+        @FocusedValue(\.workspaceNavigation) private var navigation
+    #endif
+
     init() {
         #if DEBUG
             // A UUID names an isolated test store; never accept an arbitrary data path.
@@ -24,6 +28,7 @@ struct WeaveApp: App {
     var body: some Scene {
         WindowGroup {
             WorkspaceView(store: store)
+                .tint(AppTheme.accent)
                 .onChange(of: scenePhase) { _, phase in
                     guard phase != .active else { return }
                     Task { await store.flushPendingSave() }
@@ -34,10 +39,10 @@ struct WeaveApp: App {
             .commands {
                 CommandGroup(replacing: .newItem) {
                     Button("新建记录", systemImage: "square.and.pencil") {
-                        store.createNote()
+                        navigation?.createNote(in: store)
                     }
                     .keyboardShortcut("n", modifiers: .command)
-                    .disabled(store.loadError != nil)
+                    .disabled(store.loadError != nil || navigation == nil)
                 }
             }
         #endif

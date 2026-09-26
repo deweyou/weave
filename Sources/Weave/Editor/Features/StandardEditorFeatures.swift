@@ -128,15 +128,20 @@ private struct TaskInputFeature: EditorInputFeature {
     let priority = StandardFeaturePriority.task.rawValue
 
     func command(for context: EditorInputContext) -> EditorInputCommand? {
-        guard context.replacement == "\n", context.range.length == 0, context.role == "task" else { return nil }
-        let insertion = context.paragraph.length == 0 ? NSRange(location: context.paragraph.location, length: 0) : context.range
+        guard context.replacement == "\n", context.range.length == 0, ["task", "bullet", "numbered"].contains(context.role ?? "") else {
+            return nil
+        }
         let edit =
             context.line.trimmingCharacters(in: .whitespaces).isEmpty
-            ? MarkdownShortcut.Edit(range: insertion, replacement: "", style: context.isQuoted ? .quote : .body)
+            ? MarkdownShortcut.Edit(
+                range: NSRange(location: context.paragraph.location, length: context.line.utf16.count),
+                replacement: "", style: context.isQuoted ? .quote : .body)
             : MarkdownShortcut.Edit(
                 range: context.range,
                 replacement: "\n" + context.line.prefix(while: { $0 == "\t" }),
-                style: .task)
+                style: context.role == "bullet" ? .bullet : context.role == "numbered" ? .numbered : .task,
+                listMarker: context.role == "numbered"
+                    ? "\((Int((context.listMarker ?? "1.").dropLast()) ?? 1) + 1)." : context.role == "bullet" ? "•" : nil)
         return .edit(edit, origin: .feature)
     }
 }
@@ -196,6 +201,17 @@ private struct SemanticBackspaceFeature: EditorInputFeature {
 
     func command(for context: EditorInputContext) -> EditorInputCommand? {
         guard context.replacement.isEmpty, context.selection.length == 0 else { return nil }
+        if ["bullet", "numbered", "task"].contains(context.role ?? ""),
+            context.selection.location == context.paragraph.location + context.line.prefix(while: { $0 == "\t" }).utf16.count
+        {
+            let indented = context.line.hasPrefix("\t")
+            return .edit(
+                .init(
+                    range: NSRange(location: context.paragraph.location, length: indented ? 1 : 0),
+                    replacement: "",
+                    style: indented ? (context.role == "bullet" ? .bullet : context.role == "numbered" ? .numbered : .task) : .body),
+                origin: .feature)
+        }
         if context.range.length > 0, let item = MarkdownShortcut.listPrefix(context.line),
             context.selection.location == context.paragraph.location + item.prefix.utf16.count,
             NSMaxRange(context.range) == context.selection.location,
@@ -209,9 +225,10 @@ private struct SemanticBackspaceFeature: EditorInputFeature {
                 origin: .feature)
         }
         guard context.selection.location == context.paragraph.location,
-            context.role?.hasPrefix("heading:") == true || context.role == "quote" || context.role == "task"
+            context.role?.hasPrefix("heading:") == true || context.role == "quote"
+                || ["task", "bullet", "numbered"].contains(context.role ?? "")
                 || context.codeStyle?.hasPrefix("block:") == true,
-            context.range.length == 1 || context.line.trimmingCharacters(in: .whitespaces).isEmpty
+            context.range.length <= 1 || context.line.trimmingCharacters(in: .whitespaces).isEmpty
         else { return nil }
         return .edit(
             .init(range: NSRange(location: context.selection.location, length: 0), replacement: "", style: .body),
@@ -226,7 +243,9 @@ private struct ListIndentInputFeature: EditorInputFeature {
     func command(for context: EditorInputContext) -> EditorInputCommand? {
         guard context.replacement == "\t" || context.replacement == "\u{19}", context.selection.length == 0,
             let item = MarkdownShortcut.listPrefix(context.line)
-                ?? (context.role == "task" ? ("", "", MarkdownShortcut.Style.task) : nil)
+                ?? (["task", "bullet", "numbered"].contains(context.role ?? "")
+                    ? ("", "", context.role == "bullet" ? MarkdownShortcut.Style.bullet : context.role == "numbered" ? .numbered : .task)
+                    : nil)
         else { return nil }
         if context.replacement == "\t", context.line.prefix(while: { $0 == "\t" }).count < 8 {
             return .edit(

@@ -7,6 +7,516 @@ import Testing
     import AppKit
 
     struct ReadingLayoutTests {
+        @Test @MainActor func codeExpansionAndOverflowHintsFollowVisibleBounds() throws {
+            let lines = (1...60).map { "print(\($0)) " + String(repeating: "wide ", count: 20) }.joined(separator: "\n")
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render("```swift\n" + lines + "\n```\n\n正文\n\n```\nshort\n```"),
+                    context: EnvironmentValues().fontResolutionContext))
+            let original = NSAttributedString(attributedString: storage)
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 400, height: 100_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            var range = NSRange()
+            let id = try #require(
+                storage.attribute(
+                    .weaveCodeStyle, at: 0, longestEffectiveRange: &range,
+                    in: NSRange(location: 0, length: storage.length)) as? String)
+            layout.updateCodeWidth(id: id, range: range, in: container)
+            layout.setCodeWrapping(false, id: id)
+            layout.ensureLayout(for: container)
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let shortID = try #require(storage.attribute(.weaveCodeStyle, at: storage.length - 1, effectiveRange: nil) as? String)
+            #expect(layout.canExpandCode(id: id))
+            #expect(layout.canExpandCode(id: shortID) == false)
+            let initial = layout.codeOverflowEdges(id: id, in: container)
+            #expect(initial.bottom && initial.right)
+            #expect(initial.top == false && initial.left == false)
+            layout.scrollCodeVertically(id: id, delta: 100_000, in: container)
+            layout.scrollCode(id: id, delta: 100_000, in: container)
+            layout.ensureLayout(for: container)
+            let end = layout.codeOverflowEdges(id: id, in: container)
+            #expect(end.top && end.left)
+            #expect(end.bottom == false && end.right == false)
+            let view = ReadingMacTextView(frame: CGRect(x: 0, y: 0, width: 400, height: 600), textContainer: container)
+            view.textContainerInset = NSSize(width: 32, height: 16)
+            view.isVerticallyResizable = true
+            let origin = view.textContainerOrigin
+            let headerY = layout.codeHeaderY(forGlyph: 0)
+            layout.setCodeExpanded(true, id: id, in: container)
+            view.sizeToFit()
+            #expect(view.textContainerOrigin == origin)
+            #expect(layout.codeHeaderY(forGlyph: 0) == headerY)
+            #expect(layout.codeBackgroundRect(forGlyphRange: glyphs, in: container).height > 400)
+            #expect(layout.codeVerticalLimit(id: id) == 0)
+            #expect(layout.codeVerticalOffsets[id] == 0)
+            let expanded = layout.codeOverflowEdges(id: id, in: container)
+            #expect(expanded.top == false && expanded.bottom == false)
+            #expect(expanded.left)
+            layout.setCodeExpanded(false, id: id, in: container)
+            #expect(layout.codeBackgroundRect(forGlyphRange: glyphs, in: container).height == 400)
+            #expect(layout.codeOverflowEdges(id: id, in: container).bottom)
+            #expect(storage.isEqual(to: original))
+        }
+
+        @Test(arguments: [false, true]) @MainActor
+        func codeLineNumbersFollowSourceLinesAndStayOutsideText(quoted: Bool) throws {
+            let prefix = quoted ? "> " : ""
+            let markdown =
+                prefix + "```swift\n" + prefix + String(repeating: "abcdef ", count: 8)
+                + "\n" + prefix + "\n" + prefix + "last\n" + prefix + "```\n\n正文\n\n```\nsecond block\n```"
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render(markdown), context: EnvironmentValues().fontResolutionContext))
+            let original = NSAttributedString(attributedString: storage)
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 240, height: 10_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            layout.ensureLayout(for: container)
+            let labels = layout.codeLineNumbers(in: container)
+            #expect(labels.map(\.number) == [1, 2, 3, 1])
+            let first = try #require(labels.first)
+            let glyph = layout.glyphIndexForCharacter(at: first.character)
+            let textX = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minX + layout.location(forGlyphAt: glyph).x
+            #expect(textX - first.rect.maxX >= 12)
+            var range = NSRange()
+            let id = try #require(
+                storage.attribute(
+                    .weaveCodeStyle, at: 0, longestEffectiveRange: &range,
+                    in: NSRange(location: 0, length: storage.length)) as? String)
+            layout.updateCodeWidth(id: id, range: range, in: container)
+            layout.setCodeWrapping(false, id: id)
+            layout.ensureLayout(for: container)
+            let unwrapped = layout.codeLineNumbers(in: container)
+            layout.scrollCode(id: id, delta: 100, in: container)
+            layout.ensureLayout(for: container)
+            let scrolled = layout.codeLineNumbers(in: container)
+            #expect(scrolled.map(\.number) == unwrapped.map(\.number))
+            #expect(scrolled.map(\.rect) == unwrapped.map(\.rect))
+            #expect(storage.isEqual(to: original))
+        }
+
+        @Test @MainActor func codeLineNumbersIncludeOpenBlankLineAndGrowForHundreds() throws {
+            var value = AttributedString((1...100).map { "line \($0)\n" }.joined())
+            value[CodeStyleAttribute.self] = "block:numbers"
+            value[ParagraphStyleAttribute.self] = "code"
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    value,
+                    context: EnvironmentValues().fontResolutionContext))
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 400, height: 100_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            layout.revealCodeCaret(at: storage.length, in: container)
+            let labels = layout.codeLineNumbers(in: container)
+            #expect(labels.last?.number == 101)
+            #expect((labels.first?.number ?? 0) > 1)
+            let wide = layout.codeGutterWidth(at: 0)
+            storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: "line\n")
+            layout.clampCodeViewports(in: container)
+            #expect(layout.codeGutterWidth(at: 0) < wide)
+            #expect(layout.codeLineNumbers(in: container).map(\.number) == [1, 2])
+            #expect(layout.extraLineFragmentUsedRect.minX >= layout.codeGutterWidth(at: 0))
+        }
+
+        @Test @MainActor func tallCodeScrollsInsideFixedSurface() throws {
+            let code = (1...60).map { "print(\($0))" }.joined(separator: "\n")
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render("```swift\n" + code + "\n```\n\n固定正文"),
+                    context: EnvironmentValues().fontResolutionContext))
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 400, height: 100_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            layout.ensureLayout(for: container)
+            var range = NSRange()
+            let id = try #require(
+                storage.attribute(.weaveCodeStyle, at: 0, longestEffectiveRange: &range, in: NSRange(location: 0, length: storage.length))
+                    as? String)
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let surface = layout.codeBackgroundRect(forGlyphRange: glyphs, in: container)
+            let body = layout.glyphIndexForCharacter(at: (storage.string as NSString).range(of: "固定正文").location)
+            let bodyY = layout.lineFragmentRect(forGlyphAt: body, effectiveRange: nil).minY
+            #expect(abs(surface.height - 400) < 1)
+            #expect(bodyY < 460)
+            #expect(layout.codeVerticalLimit(id: id) > 500)
+            layout.scrollCodeVertically(id: id, delta: 200, in: container)
+            #expect(layout.codeVerticalOffsets[id] == 200)
+            #expect(layout.codeBackgroundRect(forGlyphRange: glyphs, in: container) == surface)
+            #expect(abs(layout.lineFragmentRect(forGlyphAt: body, effectiveRange: nil).minY - bodyY) < 1)
+            let hit = layout.characterIndex(
+                for: CGPoint(x: 24, y: surface.minY + 100), in: container,
+                fractionOfDistanceBetweenInsertionPoints: nil)
+            let hitLine = (storage.string as NSString).paragraphRange(for: NSRange(location: hit, length: 0))
+            #expect((storage.string as NSString).substring(with: hitLine).hasPrefix("print(12)"))
+            layout.revealCodeCaret(at: NSMaxRange(range) - 2, in: container)
+            #expect((layout.codeVerticalOffsets[id] ?? 0) > 500)
+            #expect(layout.codeBackgroundRect(forGlyphRange: glyphs, in: container) == surface)
+            #expect(abs(layout.lineFragmentRect(forGlyphAt: body, effectiveRange: nil).minY - bodyY) < 1)
+        }
+
+        @Test @MainActor func tallCodeNativeArrowMovementDoesNotSkipHiddenLines() throws {
+            let code = (1...60).map { "print(\($0))" }.joined(separator: "\n")
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render("```swift\n" + code + "\n```\n\n正文"),
+                    context: EnvironmentValues().fontResolutionContext))
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 400, height: 100_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            let view = ReadingMacTextView(frame: CGRect(x: 0, y: 0, width: 400, height: 600), textContainer: container)
+            let source = storage.string as NSString
+            let start = source.range(of: "print(60)").location + 4
+            view.setSelectedRange(NSRange(location: start, length: 0))
+            layout.revealCodeCaret(at: start, in: container)
+            for _ in 0..<18 { view.moveUp(nil) }
+            #expect(view.selectedRange().location == source.range(of: "print(42)").location + 4)
+            for _ in 0..<18 { view.moveDown(nil) }
+            #expect(view.selectedRange().location == start)
+        }
+
+        @Test(arguments: [false, true]) @MainActor
+        func tallCodeReflowAndDeletionClampVerticalOffset(quoted: Bool) throws {
+            let prefix = quoted ? "> " : ""
+            let source =
+                "正文前缀\n\n" + prefix + "```swift\n" + prefix
+                + String(repeating: "中文 🌿 long code line ", count: 200) + "\n" + prefix + "```\n\n固定正文\n\n```\nshort\n```"
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render(source), context: EnvironmentValues().fontResolutionContext))
+            let original = NSAttributedString(attributedString: storage)
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 300, height: 100_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            let start = (storage.string as NSString).range(of: "中文").location
+            var range = NSRange()
+            let id = try #require(
+                storage.attribute(
+                    .weaveCodeStyle, at: start, longestEffectiveRange: &range,
+                    in: NSRange(location: 0, length: storage.length)) as? String)
+            layout.updateCodeWidth(id: id, range: range, in: container)
+            layout.ensureLayout(for: container)
+            layout.scrollCodeVertically(id: id, delta: 100_000, in: container)
+            #expect((layout.codeVerticalOffsets[id] ?? 0) > 400)
+            container.size.width = 800
+            layout.clampCodeViewports(in: container)
+            #expect(layout.codeVerticalOffsets[id] == layout.codeVerticalLimit(id: id))
+            layout.setCodeWrapping(false, id: id)
+            layout.ensureLayout(for: container)
+            #expect(layout.codeVerticalLimit(id: id) == 0)
+            #expect(layout.codeVerticalOffsets[id] == 0)
+            #expect(storage.isEqual(to: original))
+            layout.setCodeWrapping(true, id: id)
+            layout.ensureLayout(for: container)
+            layout.scrollCodeVertically(id: id, delta: 100_000, in: container)
+            storage.replaceCharacters(in: NSRange(location: range.location + 5, length: range.length - 6), with: "")
+            layout.clampCodeViewports(in: container)
+            #expect(layout.codeVerticalLimit(id: id) == 0)
+            #expect(layout.codeVerticalOffsets[id] == 0)
+            let glyphs = layout.glyphRange(forCharacterRange: NSRange(location: start, length: 5), actualCharacterRange: nil)
+            #expect(layout.codeBackgroundRect(forGlyphRange: glyphs, in: container).height < 120)
+        }
+
+        @Test @MainActor func tallOpenCodeKeepsTrailingBlankCaretInsideSurface() throws {
+            var value = AttributedString((1...60).map { "line \($0)\n" }.joined())
+            value[CodeStyleAttribute.self] = "block:open"
+            value[ParagraphStyleAttribute.self] = "code"
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    value,
+                    context: EnvironmentValues().fontResolutionContext))
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 400, height: 100_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            layout.revealCodeCaret(at: storage.length, in: container)
+            let glyphs = layout.glyphRange(forCharacterRange: NSRange(location: 0, length: storage.length), actualCharacterRange: nil)
+            let surface = layout.codeBackgroundRect(forGlyphRange: glyphs, in: container)
+            #expect(surface.height == 400)
+            #expect(layout.extraLineFragmentUsedRect.height > 0)
+            #expect(layout.extraLineFragmentUsedRect.maxY <= surface.maxY - DocumentTypography.codeInset + 1)
+        }
+
+        @Test(arguments: [false, true]) @MainActor
+        func codeWrappingAndHorizontalScrollingStayLocalToBlock(quoted: Bool) throws {
+            let prefix = quoted ? "> " : ""
+            let longLine = String(repeating: "let 中文 = 123; ", count: 30)
+            let markdown =
+                prefix + "```swift\n" + prefix + longLine + "\n" + prefix + "```\n\n" + String(repeating: "正文需要继续自动换行。", count: 20)
+            let native = NativeTextAttributes.native(
+                MarkdownFormatting.render(markdown), context: EnvironmentValues().fontResolutionContext)
+            let storage = NSTextStorage(attributedString: native)
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 280, height: 10_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            var range = NSRange()
+            let id = try #require(
+                storage.attribute(.weaveCodeStyle, at: 0, longestEffectiveRange: &range, in: NSRange(location: 0, length: storage.length))
+                    as? String)
+            layout.updateCodeWidth(id: id, range: range, in: container)
+            layout.ensureLayout(for: container)
+            let normalized = NSAttributedString(attributedString: storage)
+            let lastCharacter = longLine.utf16.count - 2
+            let lastGlyph = layout.glyphIndexForCharacter(at: lastCharacter)
+            #expect(layout.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: nil).minY > 0)
+            let bodyIndex = (storage.string as NSString).range(of: "正文").location
+            let bodyGlyph = layout.glyphIndexForCharacter(at: bodyIndex)
+            let bodyWidth = layout.lineFragmentRect(forGlyphAt: bodyGlyph, effectiveRange: nil).width
+            layout.setCodeWrapping(false, id: id)
+            layout.ensureLayout(for: container)
+            let first = layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+            #expect(layout.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: nil).minY == first.minY)
+            #expect(first.width > container.size.width)
+            layout.scrollCode(id: id, delta: 120, in: container)
+            layout.ensureLayout(for: container)
+            #expect(layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).minX == layout.codeGutterWidth(at: 0) - 120)
+            #expect(layout.lineFragmentRect(forGlyphAt: bodyGlyph, effectiveRange: nil).minX == 0)
+            #expect(layout.lineFragmentRect(forGlyphAt: bodyGlyph, effectiveRange: nil).width == bodyWidth)
+            layout.revealCodeCaret(at: lastCharacter, in: container)
+            #expect((layout.codeScrollOffsets[id] ?? 0) > 120)
+            layout.setCodeWrapping(true, id: id)
+            layout.ensureLayout(for: container)
+            #expect(layout.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: nil).minY > 0)
+            #expect(layout.codeScrollOffsets[id] == 0)
+            #expect(storage.isEqual(to: normalized))
+        }
+
+        @Test @MainActor func codeIndicatorFadesOnlyAfterScrollingAndResumesWithoutJumping() {
+            let layout = CodeLayoutManager()
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 100) == 0)
+            layout.showCodeIndicator(id: "one", at: 100)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 100) == 0)
+            #expect(abs(layout.codeIndicatorOpacity(id: "one", at: 100.06) - 0.5) < 0.001)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 100.2) == 1)
+            #expect(layout.codeIndicatorOpacity(id: "two", at: 100.2) == 0)
+            let fading = layout.codeIndicatorOpacity(id: "one", at: 100.775)
+            #expect(abs(fading - 0.5) < 0.001)
+            layout.showCodeIndicator(id: "one", at: 100.775)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 100.775) == fading)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 100.95) == 1)
+            layout.showCodeIndicator(id: "one", at: 101)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 101.5) == 1)
+            layout.updateCodeIndicators(at: 102)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 102) == 0)
+            layout.showCodeIndicator(id: "one", at: 103, reducedMotion: true)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 103) == 1)
+            layout.updateCodeIndicators(at: 104)
+            #expect(layout.codeIndicatorOpacity(id: "one", at: 104) == 0)
+        }
+
+        @Test @MainActor func codeScrollDoesNotShiftNativeTextContainerOrigin() throws {
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render("```swift\n" + String(repeating: "let value = 123; ", count: 40) + "\n```\n\n固定正文"),
+                    context: EnvironmentValues().fontResolutionContext))
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 280, height: 10_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            let view = ReadingMacTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 500), textContainer: container)
+            view.textContainerInset = NSSize(width: 100, height: 16)
+            var range = NSRange()
+            let id = try #require(
+                storage.attribute(
+                    .weaveCodeStyle, at: 0, longestEffectiveRange: &range,
+                    in: NSRange(location: 0, length: storage.length)) as? String)
+            layout.updateCodeWidth(id: id, range: range, in: container)
+            layout.setCodeWrapping(false, id: id)
+            layout.ensureLayout(for: container)
+            let origin = view.textContainerOrigin
+            let body = layout.glyphIndexForCharacter(at: (storage.string as NSString).range(of: "固定正文").location)
+            let bodyX = layout.lineFragmentRect(forGlyphAt: body, effectiveRange: nil).minX + origin.x
+            layout.scrollCode(id: id, delta: 240, in: container)
+            layout.ensureLayout(for: container)
+            #expect(view.textContainerOrigin == origin)
+            #expect(layout.lineFragmentRect(forGlyphAt: body, effectiveRange: nil).minX + view.textContainerOrigin.x == bodyX)
+            #expect(layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).minX == layout.codeGutterWidth(at: 0) - 240)
+        }
+
+        @Test @MainActor func readingViewportRejectsHorizontalAutoscrollButKeepsVerticalScrolling() {
+            let clip = ReadingClipView(frame: NSRect(x: 0, y: 0, width: 280, height: 200))
+            // Long code can make native caret/selection scrolling request a rectangle
+            // far outside reading width, even though the editor is not horizontally resizable.
+            clip.documentView = NSView(frame: NSRect(x: 0, y: 0, width: 2_000, height: 2_000))
+            for x: CGFloat in [-300, 120, 1_500] {
+                let constrained = clip.constrainBoundsRect(NSRect(x: x, y: 350, width: 280, height: 200))
+                #expect(constrained.origin.x == 0)
+                #expect(constrained.origin.y == 350)
+                clip.scroll(to: constrained.origin)
+                #expect(clip.bounds.origin.x == 0)
+                #expect(clip.bounds.origin.y == 350)
+            }
+        }
+
+        @Test @MainActor func unwrappedCodeRevealsEndCaretAndClampsAfterResize() throws {
+            let native = NativeTextAttributes.native(
+                MarkdownFormatting.render("```swift\n" + String(repeating: "中文 abc ", count: 60) + "\n```"),
+                context: EnvironmentValues().fontResolutionContext)
+            let storage = NSTextStorage(attributedString: native)
+            let layout = CodeLayoutManager()
+            let container = CodeTextContainer(size: CGSize(width: 280, height: 10_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            let id = try #require(storage.attribute(.weaveCodeStyle, at: 0, effectiveRange: nil) as? String)
+            let range = NSRange(location: 0, length: storage.length)
+            layout.updateCodeWidth(id: id, range: range, in: container)
+            layout.setCodeWrapping(false, id: id)
+            layout.revealCodeCaret(at: storage.length, in: container)
+            #expect((layout.codeScrollOffsets[id] ?? 0) > 0)
+            layout.ensureLayout(for: container)
+            let last = layout.glyphIndexForCharacter(at: storage.length - 1)
+            #expect(layout.lineFragmentUsedRect(forGlyphAt: last, effectiveRange: nil).maxX <= container.size.width + 1)
+            container.size.width = try #require(layout.codeLineWidths[id]) + 100
+            layout.updateCodeWidth(id: id, range: range, in: container)
+            layout.ensureLayout(for: container)
+            #expect(layout.codeScrollOffsets[id] == 0)
+            #expect(layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).minX == layout.codeGutterWidth(at: 0))
+        }
+
+        @Test @MainActor func linkHoverIsLocalAndDoesNotChangeStoredFormattingOrCaret() throws {
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render("> [**粗体链接**](https://example.com/one) 和 [另一个链接](https://example.com/two)"),
+                    context: EnvironmentValues().fontResolutionContext))
+            let original = NSAttributedString(attributedString: storage)
+            let layout = CodeLayoutManager()
+            let container = NSTextContainer(size: CGSize(width: 500, height: 1_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            let view = ReadingMacTextView(frame: CGRect(x: 0, y: 0, width: 500, height: 300), textContainer: container)
+            view.linkTextAttributes = NativeTextAttributes.linkTextAttributes
+            let window = NSWindow(contentRect: view.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.contentView = view
+            layout.ensureLayout(for: container)
+            let glyphRect = layout.boundingRect(forGlyphRange: NSRange(location: 0, length: 1), in: container)
+            let caret = view.firstRect(forCharacterRange: NSRange(location: 1, length: 0), actualRange: nil)
+            view.updateHoveredLink(
+                at: CGPoint(x: glyphRect.midX + view.textContainerOrigin.x, y: glyphRect.midY + view.textContainerOrigin.y))
+            #expect(layout.hoveredLinkRange == NSRange(location: 0, length: 4))
+            layout.updateLinkHoverAnimation(progress: 1)
+            var range = NSRange(location: 0, length: storage.length)
+            let attributes = try #require(
+                layout.layoutManager(
+                    layout, shouldUseTemporaryAttributes: NativeTextAttributes.linkTextAttributes,
+                    forDrawingToScreen: true, atCharacterIndex: 1, effectiveRange: &range))
+            let actual = try #require((attributes[.foregroundColor] as? NSColor)?.usingColorSpace(.deviceRGB))
+            let expected = try #require(AppTheme.nativeAccent.usingColorSpace(.deviceRGB))
+            // Color objects may differ in HDR metadata while rendering the same RGBA components.
+            #expect(abs(actual.redComponent - expected.redComponent) < 0.0001)
+            #expect(abs(actual.greenComponent - expected.greenComponent) < 0.0001)
+            #expect(abs(actual.blueComponent - expected.blueComponent) < 0.0001)
+            #expect(abs(actual.alphaComponent - expected.alphaComponent) < 0.0001)
+            #expect(attributes[.underlineStyle] as? Int == NSUnderlineStyle.single.rawValue)
+            #expect(range == NSRange(location: 0, length: 4))
+            let other = layout.layoutManager(
+                layout, shouldUseTemporaryAttributes: NativeTextAttributes.linkTextAttributes,
+                forDrawingToScreen: true, atCharacterIndex: 7, effectiveRange: nil)
+            #expect(other?[.foregroundColor] == nil)
+            #expect(view.firstRect(forCharacterRange: NSRange(location: 1, length: 0), actualRange: nil) == caret)
+            #expect(storage.isEqual(to: original))
+            view.updateHoveredLink(at: CGPoint(x: 450, y: glyphRect.midY + view.textContainerOrigin.y))
+            #expect(layout.hoveredLinkRange == nil)
+            layout.hoveredLinkRange = NSRange(location: 0, length: 4)
+            view.didChangeText()
+            #expect(layout.hoveredLinkRange == nil)
+            #expect(storage.isEqual(to: original))
+        }
+
+        @Test @MainActor func linkHoverReversesFromCurrentColorAndClearsAfterEditing() throws {
+            let storage = NSTextStorage(string: "链接", attributes: [.link: "https://example.com", .foregroundColor: NSColor.labelColor])
+            let layout = CodeLayoutManager()
+            layout.shouldReduceLinkHoverMotion = { false }
+            storage.addLayoutManager(layout)
+            let range = NSRange(location: 0, length: 2)
+            func color() -> NSColor? {
+                layout.layoutManager(
+                    layout, shouldUseTemporaryAttributes: [:], forDrawingToScreen: true,
+                    atCharacterIndex: 0, effectiveRange: nil)?[.foregroundColor] as? NSColor
+            }
+            layout.hoveredLinkRange = range
+            layout.updateLinkHoverAnimation(progress: 0.5)
+            let halfway = try #require(color())
+            #expect(halfway != NSColor.labelColor)
+            layout.hoveredLinkRange = nil
+            layout.updateLinkHoverAnimation(progress: 0)
+            #expect(color() == halfway)
+            layout.updateLinkHoverAnimation(progress: 1)
+            #expect(color() == nil)
+            layout.hoveredLinkRange = range
+            layout.updateLinkHoverAnimation(progress: 0.5)
+            layout.clearLinkHover()
+            #expect(color() == nil)
+            #expect(layout.hoveredLinkRange == nil)
+            #expect(storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == NSColor.labelColor)
+        }
+
+        @Test @MainActor func reducedMotionLinkHoverImmediatelyEntersAndLeaves() throws {
+            let storage = NSTextStorage(string: "链接", attributes: [.link: "https://example.com", .foregroundColor: NSColor.labelColor])
+            let layout = CodeLayoutManager()
+            layout.shouldReduceLinkHoverMotion = { true }
+            storage.addLayoutManager(layout)
+            func color() -> NSColor? {
+                layout.layoutManager(
+                    layout, shouldUseTemporaryAttributes: [:], forDrawingToScreen: true,
+                    atCharacterIndex: 0, effectiveRange: nil)?[.foregroundColor] as? NSColor
+            }
+            layout.hoveredLinkRange = NSRange(location: 0, length: 2)
+            let entered = try #require(color())
+            layout.updateLinkHoverAnimation(progress: 1)
+            #expect(color() == entered)
+            layout.hoveredLinkRange = nil
+            #expect(color() == nil)
+            #expect(storage.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == NSColor.labelColor)
+        }
+
+        @Test(arguments: 1...6, [180.0, 720.0]) @MainActor
+        func nestedEmphasisCaretSharesLineGeometry(level: Int, width: Double) throws {
+            let markdown =
+                "前置正文。\n\n\(String(repeating: "#", count: level)) N01 · 正文中的多重强调\n\n普通文字，**粗体里面有 *斜体内容*，然后回到粗体**，最后回到正文。\n\n普通文字，~~删除线里面有 **加粗内容** 和 *斜体内容*~~，最后回到正文。\n\n普通文字，~~***同时带删除线、加粗和斜体的中文 🌿***~~，最后回到正文。"
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render(markdown), context: EnvironmentValues().fontResolutionContext))
+            let layout = CodeLayoutManager()
+            let container = NSTextContainer(size: CGSize(width: width, height: 10_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            let view = ReadingMacTextView(frame: CGRect(x: 0, y: 0, width: width, height: 600), textContainer: container)
+            let window = NSWindow(contentRect: view.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.contentView = view
+            layout.ensureLayout(for: container)
+            var previousLine = -1
+            var previousCaret = CGRect.zero
+            let source = storage.string as NSString
+            var index = 0
+            while index < storage.length {
+                let glyph = layout.glyphIndexForCharacter(at: index)
+                var line = NSRange()
+                let used = layout.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: &line)
+                view.setSelectedRange(NSRange(location: index, length: 0), affinity: .downstream, stillSelecting: false)
+                let screen = view.firstRect(forCharacterRange: view.selectedRange(), actualRange: nil)
+                let caret = view.convert(window.convertFromScreen(screen), from: nil)
+                let fragment = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+                let font = try #require(storage.attribute(.font, at: index, effectiveRange: nil) as? NSFont)
+                let baseline = view.textContainerOrigin.y + fragment.minY + layout.location(forGlyphAt: glyph).y
+                #expect(baseline - caret.minY >= font.capHeight)
+                #expect(abs(caret.height - used.height) < 0.5)
+                if previousLine == line.location {
+                    #expect(abs(caret.minY - previousCaret.minY) < 0.5)
+                    #expect(abs(caret.height - previousCaret.height) < 0.5)
+                }
+                previousLine = line.location
+                previousCaret = caret
+                index = NSMaxRange(source.rangeOfComposedCharacterSequence(at: index))
+            }
+        }
+
         @Test @MainActor func taskMarkersUseScaledSquareGeometryAndKeepMarkdownSemantics() throws {
             let context = EnvironmentValues().fontResolutionContext
             let native = NativeTextAttributes.native(MarkdownFormatting.render("- [ ] Open\n- [x] Done"), context: context)
@@ -63,6 +573,44 @@ import Testing
             let taskGlyphs = layout.glyphRange(forCharacterRange: taskRange, actualCharacterRange: nil)
             let taskLine = layout.lineFragmentRect(forGlyphAt: taskGlyphs.location, effectiveRange: nil)
             #expect(cleanup.allSatisfy { !$0.intersects(taskLine) })
+        }
+
+        @Test(arguments: ["-", "1.", "- [ ]"], [180.0, 720.0]) @MainActor
+        func quotedListsKeepFullIndentAtEveryDepth(marker: String, width: Double) throws {
+            let markdown = (0...3).map { depth in
+                "> " + String(repeating: "    ", count: depth) + marker + " 层级\(depth) " + String(repeating: "中文内容 ", count: 15)
+            }.joined(separator: "\n")
+            let native = NativeTextAttributes.native(
+                MarkdownFormatting.render(markdown), context: EnvironmentValues().fontResolutionContext)
+            let storage = NSTextStorage(attributedString: native)
+            let layout = CodeLayoutManager()
+            let container = NSTextContainer(size: CGSize(width: width, height: 10_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            layout.ensureLayout(for: container)
+            let source = native.string as NSString
+            for depth in 0...3 {
+                let index = source.range(of: "层级\(depth)").location
+                #expect(index != NSNotFound)
+                guard index != NSNotFound else { continue }
+                let glyph = layout.glyphIndexForCharacter(at: index)
+                let fragment = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+                let x = fragment.minX + layout.location(forGlyphAt: glyph).x
+                let expected =
+                    container.lineFragmentPadding + DocumentTypography.quoteIndent + CGFloat(depth + 1) * DocumentTypography.listIndent
+                #expect(abs(x - expected) < 0.5)
+                let paragraph = try #require(native.attribute(.paragraphStyle, at: index, effectiveRange: nil) as? NSParagraphStyle)
+                #expect(abs(paragraph.headIndent + container.lineFragmentPadding - expected) < 0.5)
+                let markerRect = try #require(layout.taskMarkerRect(at: index))
+                #expect(markerRect.maxX < x)
+                let paragraphRange = source.paragraphRange(for: NSRange(location: index, length: 0))
+                let paragraphGlyphs = layout.glyphRange(forCharacterRange: paragraphRange, actualCharacterRange: nil)
+                layout.enumerateLineFragments(forGlyphRange: paragraphGlyphs) { line, _, _, lineGlyphs, _ in
+                    guard lineGlyphs.location > glyph else { return }
+                    let continuationX = line.minX + layout.location(forGlyphAt: lineGlyphs.location).x
+                    #expect(abs(continuationX - expected) < 0.5)
+                }
+            }
         }
 
         @Test @MainActor func quoteDecorationDoesNotAddTextWidthOnTopOfParagraphIndent() throws {
@@ -502,7 +1050,7 @@ import Testing
                         #expect(abs(rect.minY - used.minY) < 0.5)
                     }
                     if source.hasPrefix("```") && glyphs.location == 0 {
-                        #expect(used.minY - fragment.minY == CodeLayoutManager.headerHeight)
+                        #expect(used.minY - fragment.minY == CodeLayoutManager.headerHeight + CodeLayoutManager.codeTopPadding)
                         #expect(used.height < CodeLayoutManager.headerHeight)
                     }
                 }
@@ -822,7 +1370,7 @@ import Testing
             let range = (native.string as NSString).range(of: "let a = 1")
             #expect(native.attribute(.backgroundColor, at: range.location, effectiveRange: nil) == nil)
             let paragraph = try #require(native.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle)
-            #expect(paragraph.headIndent == 14)
+            #expect(paragraph.headIndent == DocumentTypography.codeInset)
             #expect(paragraph.lineSpacing == 3)
         }
 
@@ -850,10 +1398,11 @@ import Testing
             let body = try #require(
                 native.attribute(.paragraphStyle, at: string.range(of: "正文").location, effectiveRange: nil) as? NSParagraphStyle)
             let list = try #require(
-                native.attribute(.paragraphStyle, at: string.range(of: "•").location, effectiveRange: nil) as? NSParagraphStyle)
+                native.attribute(.paragraphStyle, at: string.range(of: "列表").location, effectiveRange: nil) as? NSParagraphStyle)
             #expect(title.paragraphSpacing >= body.paragraphSpacing)
             #expect(body.lineSpacing == 6)
-            #expect(list.headIndent > list.firstLineHeadIndent)
+            #expect(list.headIndent == list.firstLineHeadIndent)
+            #expect(list.firstLineHeadIndent > 0)
         }
     }
 #endif
