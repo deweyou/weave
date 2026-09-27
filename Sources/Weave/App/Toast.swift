@@ -113,7 +113,7 @@ private struct ToastCard: View {
         .accessibilityIdentifier("feedback-toast")
         .onHover { isHovered = $0 }
         .task {
-            AccessibilityNotification.Announcement(message.title + "。" + message.message).post()
+            AccessibilityNotification.Announcement(message.title + " " + message.message).post()
         }
         .task(id: TimerKey(hovered: isHovered, details: showsDetails, voiceOver: voiceOver)) {
             guard !isHovered, !showsDetails, !voiceOver else { return }

@@ -3,7 +3,7 @@
     import UniformTypeIdentifiers
 
     private enum MobileLibrary: Hashable {
-        case recent, all, unfiled, tasks
+        case recent, all, unfiled, tasks, settings
         case folder(UUID)
         case document(UUID)
 
@@ -41,12 +41,13 @@
 
         private var title: String {
             switch library ?? .all {
-            case .recent: "最近"
-            case .all: "记录"
-            case .unfiled: "未分类"
-            case .tasks: "任务"
-            case .document(let id): store.notes.first(where: { $0.id == id })?.displayTitle ?? "记录"
-            case .folder(let id): store.folders.first(where: { $0.id == id })?.name ?? "分类"
+            case .recent: L10n.string("最近")
+            case .all: L10n.string("记录")
+            case .unfiled: L10n.string("未分类")
+            case .tasks: L10n.string("任务")
+            case .settings: L10n.string("设置")
+            case .document(let id): store.notes.first(where: { $0.id == id })?.displayTitle ?? L10n.string("记录")
+            case .folder(let id): store.folders.first(where: { $0.id == id })?.name ?? L10n.string("分类")
             }
         }
 
@@ -57,7 +58,7 @@
                 case .recent, .all: matches = true
                 case .unfiled: matches = note.folderID == nil
                 case .folder(let id): matches = note.folderID == id
-                case .tasks, .document: matches = false
+                case .tasks, .settings, .document: matches = false
                 }
                 return matches
                     && (query.isEmpty || note.title.localizedStandardContains(query) || note.text.localizedStandardContains(query))
@@ -82,7 +83,7 @@
             }
             .navigationSplitViewStyle(.balanced)
             .onChange(of: query) { _, _ in galleryScroll.reset() }
-            .alert(editingFolderID == nil ? "新建分类" : "重命名分类", isPresented: $showsFolderEditor) {
+            .alert(editingFolderID == nil ? L10n.string("新建分类") : L10n.string("重命名分类"), isPresented: $showsFolderEditor) {
                 TextField("分类名称", text: $folderName).accessibilityIdentifier("folder-name")
                 Button("取消", role: .cancel) {}
                 Button("保存") {
@@ -98,12 +99,12 @@
             .sheet(item: $movingNote) { note in
                 NavigationStack {
                     List {
-                        moveDestination("未分类", folderID: nil, note: note)
+                        moveDestination(L10n.string("未分类"), folderID: nil, note: note)
                         ForEach(store.folders) { folder in
                             moveDestination(folder.name, folderID: folder.id, note: note)
                         }
                     }
-                    .navigationTitle("移动到分类")
+                    .navigationTitle(L10n.string("移动到分类"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) { Button("取消") { movingNote = nil } }
@@ -153,12 +154,14 @@
                         }
                     }
                     .accessibilityIdentifier("workspace-tasks")
+                    NavigationLink(value: MobileLibrary.settings) { Label("设置", systemImage: "gearshape") }
+                        .accessibilityIdentifier("workspace-settings")
                 }
-                if library != .tasks {
+                if library != .tasks && library != .settings {
                     Section("记录") {
-                        libraryLink("最近", symbol: "clock", destination: .recent)
-                        libraryLink("全部记录", symbol: "tray.full", destination: .all)
-                        libraryLink("未分类", symbol: "tray", destination: .unfiled)
+                        libraryLink(L10n.string("最近"), symbol: "clock", destination: .recent)
+                        libraryLink(L10n.string("全部记录"), symbol: "tray.full", destination: .all)
+                        libraryLink(L10n.string("未分类"), symbol: "tray", destination: .unfiled)
                     }
                     Section("分类") {
                         ForEach(store.folders) { folder in
@@ -199,7 +202,9 @@
         }
 
         @ViewBuilder private var libraryContent: some View {
-            if let error = store.loadError {
+            if library == .settings {
+                AppSettingsView()
+            } else if let error = store.loadError {
                 ContentUnavailableView {
                     Label("无法读取记录", systemImage: "exclamationmark.triangle")
                 } description: {
@@ -297,7 +302,7 @@
         }
 
         private func prepareNewNote() {
-            if library == nil || library == .tasks { select(.all) }
+            if library == nil || library == .tasks || library == .settings { select(.all) }
             query = ""
         }
 

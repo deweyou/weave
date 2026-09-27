@@ -1,41 +1,59 @@
 #if os(macOS)
     import AppKit
     import SwiftUI
-    import UniformTypeIdentifiers
-
-    enum NoteLocation: Hashable {
-        case recent, all, unfiled
-        case folder(UUID)
-    }
-
-    private enum WorkspaceDestination: Hashable {
-        case notes, tasks
-        case location(NoteLocation)
-        case note(UUID)
-    }
 
     @MainActor @Observable
     final class MacWorkspaceNavigation {
-        var location: NoteLocation = .all
-        var editorID: UUID?
-        var showsTasks = false
-        var query = ""
+        enum Destination: Equatable {
+            case home, documents, tasks, settings
+        }
 
-        func browse(_ location: NoteLocation) {
-            self.location = location
-            editorID = nil
-            showsTasks = false
-            query = ""
+        private struct Location: Equatable {
+            var destination: Destination
+            var editorID: UUID?
+        }
+
+        private var location = Location(destination: .home)
+        private var backHistory: [Location] = []
+        private var forwardHistory: [Location] = []
+
+        var destination: Destination { location.destination }
+        var editorID: UUID? { location.editorID }
+        var canGoBack: Bool { !backHistory.isEmpty }
+        var canGoForward: Bool { !forwardHistory.isEmpty }
+
+        func select(_ destination: Destination) {
+            visit(Location(destination: destination))
+        }
+
+        func openNote(_ id: UUID) {
+            visit(Location(destination: .documents, editorID: id))
+        }
+
+        func goBack() {
+            guard let previous = backHistory.popLast() else { return }
+            forwardHistory.append(location)
+            location = previous
+        }
+
+        func goForward() {
+            guard let next = forwardHistory.popLast() else { return }
+            backHistory.append(location)
+            location = next
+        }
+
+        private func visit(_ next: Location) {
+            guard next != location else { return }
+            backHistory.append(location)
+            location = next
+            forwardHistory.removeAll()
         }
 
         func createNote(in store: NoteStore) {
-            let folderID: UUID?
-            if case .folder(let id) = location, !showsTasks { folderID = id } else { folderID = nil }
-            store.createNote(folderID: folderID)
-            editorID = store.selectedID
-            showsTasks = false
-            query = ""
+            store.createNote()
+            if let id = store.selectedID { openNote(id) }
         }
+
     }
 
     extension FocusedValues {
@@ -44,91 +62,58 @@
 
     struct MacWorkspaceView: View {
         @Bindable var store: NoteStore
+        @Environment(\.colorSchemeContrast) private var contrast
+        @Environment(\.colorScheme) private var colorScheme
+        @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
         @State private var navigation = MacWorkspaceNavigation()
-        @State private var expandedFolders: Set<UUID> = []
-        @State private var showsImport = false
-        @State private var importError: String?
-        @State private var showsFolderEditor = false
-        @State private var editingFolderID: UUID?
-        @State private var folderName = ""
         @State private var galleryScroll = RecordGalleryScrollState()
 
-        private var title: String {
-            switch navigation.location {
-            case .recent: "最近"
-            case .all: "记录"
-            case .unfiled: "未分类"
-            case .folder(let id): store.folders.first(where: { $0.id == id })?.name ?? "分类"
-            }
-        }
-
         private var notes: [Note] {
-            let filtered = store.notes.filter { note in
-                let matches: Bool
-                switch navigation.location {
-                case .recent, .all: matches = true
-                case .unfiled: matches = note.folderID == nil
-                case .folder(let id): matches = note.folderID == id
-                }
-                return matches
-                    && (navigation.query.isEmpty || note.title.localizedStandardContains(navigation.query)
-                        || note.text.localizedStandardContains(navigation.query))
-            }
-            return filtered.sorted { $0.updatedAt > $1.updatedAt }
+            store.notes.sorted { $0.updatedAt > $1.updatedAt }
         }
 
         var body: some View {
-            NavigationSplitView {
-                sidebar
-                    .navigationTitle("Weave")
-                    .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 320)
-            } detail: {
-                detail
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .toolbar {
-                        if !navigation.showsTasks {
-                            ToolbarItem(placement: .primaryAction) {
-                                Button("新建记录", systemImage: "square.and.pencil") { navigation.createNote(in: store) }
-                                    .accessibilityIdentifier("new-note")
-                                    .help("新建记录 ⌘N")
-                                    .disabled(store.loadError != nil)
-                            }
-                        }
+            HStack(spacing: 0) {
+                functionRail
+                workspaceCard
+                    .background(WorkspaceWindowControls())
+                    .padding(.trailing, 4)
+                    .padding(.bottom, 4)
+                    .padding(.top, 14)
+            }
+            .background {
+                ZStack {
+                    if reduceTransparency {
+                        Color(nsColor: .windowBackgroundColor)
+                    } else {
+                        WorkspaceBackdrop()
                     }
+                    // Keep the glass tint close to the document canvas without hiding it.
+                    Color(nsColor: .textBackgroundColor)
+                        .opacity(contrast == .increased ? 0 : (colorScheme == .dark ? 0.68 : 0.50))
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
             }
-            .frame(minWidth: 720, minHeight: 460)
+            .containerBackground(.clear, for: .window)
+            .frame(minWidth: 780, minHeight: 460)
+            .containerShape(.rect(cornerRadius: 16))
+            .overlay(alignment: .top) {
+                HStack(spacing: 4) {
+                    historyButton("后退", symbol: "chevron.left", enabled: navigation.canGoBack, action: navigation.goBack)
+                        .accessibilityIdentifier("navigation-back")
+                    historyButton("前进", symbol: "chevron.right", enabled: navigation.canGoForward, action: navigation.goForward)
+                        .accessibilityIdentifier("navigation-forward")
+                    Spacer(minLength: 0)
+                    if navigation.destination == .documents { newNoteButton }
+                }
+                .padding(.leading, 84)
+                .padding(.trailing, 12)
+                .frame(height: 46)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(edges: .top)
+            }
             .focusedSceneValue(\.workspaceNavigation, navigation)
-            .onChange(of: navigation.location) { _, _ in galleryScroll.reset() }
-            .onChange(of: navigation.query) { _, _ in galleryScroll.reset() }
-            .fileImporter(isPresented: $showsImport, allowedContentTypes: [MarkdownFile.contentType, .plainText]) { result in
-                do {
-                    let url = try result.get()
-                    let access = url.startAccessingSecurityScopedResource()
-                    defer { if access { url.stopAccessingSecurityScopedResource() } }
-                    let source = try String(contentsOf: url, encoding: .utf8)
-                    let folderID: UUID?
-                    if case .folder(let id) = navigation.location { folderID = id } else { folderID = nil }
-                    store.createNote(
-                        title: url.deletingPathExtension().lastPathComponent,
-                        richText: MarkdownFormatting.render(source), folderID: folderID
-                    )
-                    navigation.editorID = store.selectedID
-                    navigation.query = ""
-                } catch { importError = error.localizedDescription }
-            }
-            .alert("无法导入 Markdown", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
-                Button("好") { importError = nil }
-            } message: {
-                Text(importError ?? "")
-            }
-            .alert(editingFolderID == nil ? "新建分类" : "重命名分类", isPresented: $showsFolderEditor) {
-                TextField("分类名称", text: $folderName)
-                    .accessibilityIdentifier("folder-name")
-                Button("取消", role: .cancel) {}
-                Button("保存") { saveFolder() }
-                    .disabled(folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if navigation.editorID == nil, let error = store.saveError {
                     HStack {
@@ -140,106 +125,174 @@
             }
         }
 
-        private var sidebar: some View {
-            List(
-                selection: Binding<WorkspaceDestination?>(
-                    get: {
-                        if navigation.showsTasks { return .tasks }
-                        if let id = navigation.editorID { return .note(id) }
-                        return .location(navigation.location)
-                    },
-                    set: { destination in
-                        switch destination {
-                        case .notes: navigation.browse(.all)
-                        case .tasks:
-                            navigation.showsTasks = true
-                            navigation.editorID = nil
-                        case .location(let location): navigation.browse(location)
-                        case .note(let id): navigation.editorID = id
-                        case nil: break
-                        }
-                    }
-                )
-            ) {
-                Section {
-                    Label("记录", systemImage: "note.text")
-                        .fontWeight(navigation.showsTasks ? .regular : .semibold)
-                        .tag(WorkspaceDestination.notes)
-                        .accessibilityIdentifier("workspace-notes")
-                    HStack {
-                        Label("任务", systemImage: "checklist")
-                        Spacer()
-                        Text("稍后推出").font(.caption).foregroundStyle(.secondary)
-                    }
-                    .tag(WorkspaceDestination.tasks)
-                    .accessibilityIdentifier("workspace-tasks")
+        private func historyButton(
+            _ title: LocalizedStringKey, symbol: String, enabled: Bool, action: @escaping () -> Void
+        ) -> some View {
+            Button(action: action) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .regular))
+                    .frame(width: 28, height: 32)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .tint(.primary)
+            .accessibilityLabel(title)
+            .help(title)
+            .disabled(!enabled)
+            .pointerStyle(enabled ? .link : .default)
+        }
+
+        private var newNoteButton: some View {
+            Button {
+                navigation.createNote(in: store)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .regular))
+                    .frame(width: 32, height: 32)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .tint(.primary)
+            .accessibilityLabel("新建记录")
+            .accessibilityIdentifier("new-note")
+            .help("新建记录 ⌘N")
+            .disabled(store.loadError != nil)
+            .pointerStyle(store.loadError == nil ? .link : .default)
+        }
+
+        private var functionRail: some View {
+            VStack(spacing: 6) {
+                destinationButton("首页", symbol: "house", isSelected: navigation.destination == .home) {
+                    navigation.select(.home)
                 }
-                if !navigation.showsTasks {
-                    Section("记录") {
-                        locationRow("最近", symbol: "clock", location: .recent)
-                        locationRow("全部记录", symbol: "tray.full", location: .all)
-                        locationRow("未分类", symbol: "tray", location: .unfiled)
-                    }
-                    Section {
-                        ForEach(store.folders) { folder in
-                            DisclosureGroup(
-                                isExpanded: Binding(
-                                    get: { expandedFolders.contains(folder.id) },
-                                    set: { if $0 { expandedFolders.insert(folder.id) } else { expandedFolders.remove(folder.id) } }
-                                )
-                            ) {
-                                ForEach(store.notes.filter { $0.folderID == folder.id }) { note in
-                                    Label(note.displayTitle, systemImage: "doc.text").lineLimit(1)
-                                        .tag(WorkspaceDestination.note(note.id))
-                                        .contextMenu { noteActions(note) }
-                                }
-                            } label: {
-                                locationRow(folder.name, symbol: "folder", location: .folder(folder.id))
-                                    .accessibilityIdentifier("folder-row-\(folder.id)")
-                                    .contextMenu {
-                                        Button("重命名…") {
-                                            editingFolderID = folder.id
-                                            folderName = folder.name
-                                            showsFolderEditor = true
-                                        }
-                                    }
-                            }
-                            .tag(WorkspaceDestination.location(.folder(folder.id)))
+                .accessibilityIdentifier("workspace-home")
+                destinationButton("文档", symbol: "doc.text", isSelected: navigation.destination == .documents) {
+                    navigation.select(.documents)
+                }
+                .accessibilityIdentifier("workspace-documents")
+                destinationButton("任务", symbol: "checkmark.square", isSelected: navigation.destination == .tasks) {
+                    navigation.select(.tasks)
+                }
+                .accessibilityIdentifier("workspace-tasks")
+                .help("任务 · 稍后推出")
+                Spacer(minLength: 0)
+                destinationButton("设置", symbol: "gearshape", isSelected: navigation.destination == .settings) {
+                    navigation.select(.settings)
+                }
+                .accessibilityIdentifier("workspace-settings")
+                .help("设置")
+            }
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+            .frame(width: 48)
+            .frame(maxHeight: .infinity)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("功能导航")
+        }
+
+        private func destinationButton(
+            _ title: LocalizedStringKey, symbol: String, isSelected: Bool, action: @escaping () -> Void
+        ) -> some View {
+            Button(action: action) {
+                Image(systemName: isSelected ? "\(symbol).fill" : symbol)
+                    .accessibilityHidden(true)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .frame(width: 32, height: 32)
+                    .background {
+                        if isSelected {
+                            RoundedRectangle(cornerRadius: 9)
+                                .fill(Color.primary.opacity(contrast == .increased ? 0.16 : 0.07))
                         }
-                    } header: {
-                        Text("分类")
+                    }
+                    .contentShape(.rect(cornerRadius: 9))
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .help(title)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
+
+        private var workspaceCard: some View {
+            Group {
+                if navigation.destination == .settings {
+                    AppSettingsView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if navigation.destination == .home {
+                    ContentUnavailableView("首页", systemImage: "house", description: Text("从文档开始记录。"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    HSplitView {
+                        notesSidebar
+                            .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
+                            .background(WorkspaceSplitPosition())
+                        VStack(spacing: 0) {
+                            detail
+                        }
+                        .frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(nsColor: .textBackgroundColor))
                     }
                 }
             }
-            .listStyle(.sidebar)
-            .buttonStyle(.borderless)
-            .safeAreaInset(edge: .bottom) {
-                if !navigation.showsTasks {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Button("新建分类", systemImage: "folder.badge.plus") {
-                            editingFolderID = nil
-                            folderName = ""
-                            showsFolderEditor = true
-                        }
-                        .accessibilityIdentifier("new-folder")
-                        Button("导入 Markdown…", systemImage: "square.and.arrow.down") { showsImport = true }
-                            .accessibilityIdentifier("import-markdown")
-                    }
-                    .buttonStyle(.borderless)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .disabled(store.loadError != nil)
-                }
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(workspaceCardShape)
+            .background {
+                workspaceCardShape
+                    .fill(Color(nsColor: .textBackgroundColor))
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 4, y: 1)
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                workspaceCardShape
+                    .stroke(Color.primary.opacity(contrast == .increased ? 0.3 : 0.08), lineWidth: 1)
+                    .clipShape(workspaceCardShape)
+                    .allowsHitTesting(false)
             }
         }
 
-        private func locationRow(_ label: String, symbol: String, location: NoteLocation) -> some View {
-            Label(label, systemImage: symbol)
-                .lineLimit(1)
-                .tag(WorkspaceDestination.location(location))
-                .contentShape(Rectangle())
-                // List does not write its selection again when the selected row is clicked.
-                .simultaneousGesture(TapGesture().onEnded { navigation.browse(location) })
+        private var workspaceCardShape: ConcentricRectangle {
+            ConcentricRectangle(
+                topLeadingCorner: .fixed(16), topTrailingCorner: .fixed(16),
+                bottomLeadingCorner: .fixed(16), bottomTrailingCorner: .concentric)
+        }
+
+        private var notesSidebar: some View {
+            VStack(spacing: 0) {
+                if navigation.destination == .documents {
+                    Button {
+                        navigation.select(.documents)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                                .accessibilityHidden(true)
+                            Text(verbatim: "Inbox")
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.primary.opacity(contrast == .increased ? 0.16 : 0.06))
+                        }
+                        .contentShape(.rect(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("documents-inbox")
+                    .accessibilityAddTraits(.isSelected)
+                    .pointerStyle(.link)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 12)
+                }
+                Spacer(minLength: 0)
+
+            }
+            .background(Color(nsColor: .textBackgroundColor))
         }
 
         @ViewBuilder private var detail: some View {
@@ -251,23 +304,12 @@
                 } actions: {
                     Button("重新读取") { store.reload() }
                 }
-            } else if navigation.showsTasks {
+            } else if navigation.destination == .tasks {
                 ContentUnavailableView("任务稍后推出", systemImage: "checklist", description: Text("独立任务和任务分类正在规划中。你仍可以在记录中使用待办列表。"))
-                    .navigationTitle("任务")
+                    .navigationTitle(L10n.string("任务"))
             } else if let note = store.notes.first(where: { $0.id == navigation.editorID }) {
                 NoteEditorView(note: note, store: store, saveError: store.saveError, retrySave: store.retrySave)
                     .id(note.id)
-                    .toolbar {
-                        ToolbarItem(placement: .navigation) {
-                            Button("返回\(title)", systemImage: "chevron.left") { navigation.editorID = nil }
-                                .accessibilityIdentifier("back-to-notes")
-                                .keyboardShortcut("[", modifiers: .command)
-                        }
-                        ToolbarItem(placement: .primaryAction) {
-                            Menu("整理记录", systemImage: "ellipsis.circle") { noteActions(note) }
-                                .accessibilityIdentifier("organize-note")
-                        }
-                    }
             } else {
                 library
             }
@@ -275,15 +317,16 @@
 
         private var library: some View {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(title).font(.largeTitle.bold())
+                HStack(alignment: .center, spacing: 12) {
+                    Text(verbatim: "Inbox").font(.largeTitle.bold())
                     Spacer()
                     Text("\(notes.count) 条记录").foregroundStyle(.secondary)
+
                 }
-                .padding(.horizontal, 32).padding(.top, 24).padding(.bottom, 20)
+                .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 4)
                 RecordGallery(notes: notes, scrollState: galleryScroll) { note in
                     Button {
-                        navigation.editorID = note.id
+                        navigation.openNote(note.id)
                     } label: {
                         RecordCard(note: note)
                     }
@@ -292,45 +335,116 @@
                     .accessibilityLabel(note.displayTitle)
                     .accessibilityValue(note.preview)
                     .pointerStyle(.link)
-                    .contextMenu { noteActions(note) }
                 }
                 .overlay {
                     if notes.isEmpty {
-                        if !navigation.query.isEmpty {
-                            ContentUnavailableView.search(text: navigation.query)
-                        } else {
-                            ContentUnavailableView {
-                                Label("从一条记录开始", systemImage: "note.text")
-                            } description: {
-                                Text("写下想法，把内容慢慢整理起来。")
-                            } actions: {
-                                Button("新建记录", systemImage: "plus") { navigation.createNote(in: store) }
-                                    .buttonStyle(.glassProminent)
-                                    .accessibilityIdentifier("empty-new-note")
-                            }
+                        ContentUnavailableView {
+                            Label("从一条记录开始", systemImage: "note.text")
+                        } description: {
+                            Text("写下想法。")
                         }
                     }
                 }
             }
-            .navigationTitle(title)
-            .searchable(text: $navigation.query, prompt: "搜索\(title)")
+            .navigationTitle("Inbox")
+        }
+    }
+
+    /// Center native window controls in the full strip above the card.
+    private struct WorkspaceWindowControls: NSViewRepresentable {
+        func makeNSView(context: Context) -> AlignmentView { AlignmentView() }
+
+        func updateNSView(_ view: AlignmentView, context: Context) {
+            view.needsLayout = true
         }
 
-        @ViewBuilder private func noteActions(_ note: Note) -> some View {
-            Menu("移动到分类", systemImage: "folder") {
-                Button("未分类") { store.moveNote(id: note.id, to: nil) }
-                ForEach(store.folders) { folder in
-                    Button(folder.name) { store.moveNote(id: note.id, to: folder.id) }
+        final class AlignmentView: NSView {
+            override func viewDidMoveToWindow() {
+                super.viewDidMoveToWindow()
+                NotificationCenter.default.removeObserver(self)
+                guard let window else { return }
+                // SwiftUI may mount this probe before AppKit restores the final window size.
+                // Reconcile after window updates as well as geometry changes; alignment is idempotent.
+                for name in [NSWindow.didResizeNotification, NSWindow.didExitFullScreenNotification, NSWindow.didUpdateNotification] {
+                    NotificationCenter.default.addObserver(self, selector: #selector(alignControls), name: name, object: window)
+                }
+                needsLayout = true
+            }
+
+            override func layout() {
+                super.layout()
+                alignControls()
+            }
+
+            @objc private func alignControls() {
+                guard let window, !window.styleMask.contains(.fullScreen), bounds.height > 0 else { return }
+                let cardTop = convert(bounds, to: nil).maxY
+                let stripHeight = window.frame.height - cardTop
+                // Do not reposition system controls during transient or full-screen layouts.
+                guard (20...80).contains(stripHeight) else { return }
+                let center = NSPoint(x: 0, y: cardTop + stripHeight / 2)
+                for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                    guard let button = window.standardWindowButton(kind), let parent = button.superview else { continue }
+                    let y = parent.convert(center, from: nil).y - button.frame.height / 2
+                    if abs(button.frame.origin.y - y) > 0.25 {
+                        button.setFrameOrigin(NSPoint(x: button.frame.origin.x, y: y))
+                    }
                 }
             }
+
+            override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        }
+    }
+
+    /// Sample behind the window while keeping the document surface opaque.
+    private struct WorkspaceBackdrop: NSViewRepresentable {
+        func makeNSView(context: Context) -> NSVisualEffectView {
+            let view = NSVisualEffectView()
+            view.material = .underWindowBackground
+            view.blendingMode = .behindWindow
+            view.state = .followsWindowActiveState
+            return view
         }
 
-        private func saveFolder() {
-            if let editingFolderID {
-                store.renameFolder(id: editingFolderID, name: folderName)
-            } else if let id = store.createFolder(name: folderName) {
-                navigation.browse(.folder(id))
+        func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+    }
+
+    /// Set the initial divider once; subsequent resizing remains owned by the native split view.
+    private struct WorkspaceSplitPosition: NSViewRepresentable {
+        func makeNSView(context: Context) -> InitialPositionView { InitialPositionView() }
+
+        func updateNSView(_ view: InitialPositionView, context: Context) {}
+
+        final class InitialPositionView: NSView {
+            private var didSetPosition = false
+            private var initialLayoutTask: Task<Void, Never>?
+
+            override func viewDidMoveToWindow() {
+                super.viewDidMoveToWindow()
+                initialLayoutTask?.cancel()
+                guard window != nil else { return }
+                // SwiftUI must finish mounting and sizing the native split before applying its initial position.
+                initialLayoutTask = Task { @MainActor [weak self] in
+                    guard !Task.isCancelled else { return }
+                    self?.setInitialPosition()
+                }
             }
+
+            private func setInitialPosition() {
+                guard !didSetPosition, window != nil else { return }
+                var ancestor = superview
+                while let view = ancestor {
+                    if let split = view as? NSSplitView, split.isVertical, split.arrangedSubviews.count == 2, split.bounds.width > 0 {
+                        split.layoutSubtreeIfNeeded()
+                        didSetPosition = true
+                        split.setPosition(240, ofDividerAt: 0)
+                        return
+                    }
+                    ancestor = view.superview
+                }
+            }
+
+            override func hitTest(_ point: NSPoint) -> NSView? { nil }
         }
     }
 #endif
