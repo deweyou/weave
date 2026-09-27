@@ -44,7 +44,7 @@ struct CodeBlockEditingTests {
         let original = text
         var selection = AttributedTextSelection(range: text.startIndex..<text.endIndex)
         #expect(CodeBlockEditing.indent(in: &text, selection: &selection, outdent: false))
-        #expect(String(text.characters) == "    let 🌊 = 1\n    print(🌊)")
+        #expect(String(text.characters) == "  let 🌊 = 1\n  print(🌊)")
         #expect(CodeBlockEditing.indent(in: &text, selection: &selection, outdent: true))
         #expect(text == original)
     }
@@ -56,14 +56,14 @@ struct CodeBlockEditingTests {
         CodeBlockEditing.indent(in: &text, selection: &selection, outdent: true)
         #expect(String(text.characters) == "first\nsecond\nthird")
         CodeBlockEditing.indent(in: &text, selection: &selection, outdent: false)
-        #expect(String(text.characters) == "    first\n    second\nthird")
+        #expect(String(text.characters) == "  first\n  second\nthird")
     }
 
     @Test func tabOnTrailingEmptyCodeLineInsertsIndentWithBlockLanguage() {
         var text = code("let wave = 1\n")
         var selection = AttributedTextSelection(insertionPoint: text.endIndex)
         #expect(CodeBlockEditing.indent(in: &text, selection: &selection, outdent: false))
-        #expect(String(text.characters) == "let wave = 1\n    ")
+        #expect(String(text.characters) == "let wave = 1\n  ")
         #expect(text[CodeStyleAttribute.self] == "block:sample")
         #expect(text[CodeLanguageAttribute.self] == "swift")
         if case .insertionPoint(let caret) = selection.indices(in: text) {
@@ -121,4 +121,29 @@ struct CodeBlockEditingTests {
         #expect(CodeBlockEditing.tokens(source: "let x = \"unterminated if", language: "swift").map(\.kind) == [.keyword, .string])
         #expect(CodeBlockEditing.tokens(source: "/* unterminated let", language: "swift").map(\.kind) == [.comment])
     }
+    @Test(arguments: [
+        ("go", "func"), ("rust", "fn"), ("java", "class"), ("kotlin", "fun"),
+        ("c", "typedef"), ("cpp", "namespace"), ("csharp", "using"),
+        ("ruby", "def"), ("php", "echo"), ("sql", "SELECT"),
+        ("html", "<div"), ("xml", "<root"), ("css", ".item{"),
+        ("scss", "$color:"), ("less", "@color:"), ("yaml", "name:"),
+        ("markdown", "# Heading"), ("graphql", "query"),
+        ("jsx", "<Component"), ("tsx", "interface"),
+    ])
+    func expandedLanguagesRecognizeSyntax(language: String, source: String) {
+        let tokens = CodeBlockEditing.tokens(source: source, language: language)
+        #expect(tokens.contains { $0.kind == .keyword })
+        #expect(CodeBlockEditing.languages.contains { $0.id == language })
+    }
+
+    @Test func aliasesShareRulesAndCommentsProtectKeywords() {
+        for alias in ["rs", "kt", "c++", "cs", "rb", "golang", "gql", "yml", "md", "htm"] {
+            let canonical = CodeBlockEditing.canonicalLanguage(alias)
+            #expect(CodeBlockEditing.languages.contains { $0.id == canonical })
+        }
+        #expect(CodeBlockEditing.tokens(source: "-- SELECT 42", language: "sql").map(\.kind) == [.comment])
+        #expect(CodeBlockEditing.tokens(source: "<!-- <div> 42 -->", language: "html").map(\.kind) == [.comment])
+        #expect(CodeBlockEditing.tokens(source: "/* color: 42 */", language: "css").map(\.kind) == [.comment])
+    }
+
 }

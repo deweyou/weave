@@ -2,6 +2,42 @@ import Foundation
 import Observation
 import SwiftUI
 
+private struct NoteLibrary: Codable, Sendable {
+    var version = 1
+    var folders: [NoteFolder]
+    var notes: [Note]
+
+    private enum CodingKeys: String, CodingKey {
+        case version, folders, notes
+    }
+
+    init(folders: [NoteFolder] = [], notes: [Note] = []) {
+        self.folders = folders
+        self.notes = notes
+    }
+
+    init(from decoder: any Decoder) throws {
+        // Only an actual array takes the legacy path; malformed envelopes must not
+        // fall back to an empty library and overwrite the original file.
+        if var container = try? decoder.unkeyedContainer() {
+            folders = []
+            notes = []
+            while !container.isAtEnd {
+                notes.append(try container.decode(Note.self))
+            }
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        guard version == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .version, in: container, debugDescription: "Unsupported note library version.")
+        }
+        folders = try container.decode([NoteFolder].self, forKey: .folders)
+        notes = try container.decode([Note].self, forKey: .notes)
+    }
+}
+
 private actor NotePersistenceWriter {
     private let directory: URL
 
@@ -9,8 +45,8 @@ private actor NotePersistenceWriter {
         self.directory = directory
     }
 
-    func write(_ notes: [Note]) throws {
-        let encodedNotes = try JSONEncoder().encode(notes)
+    func write(_ library: NoteLibrary) throws {
+        let encodedNotes = try JSONEncoder().encode(library)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try encodedNotes.write(to: directory.appendingPathComponent("notes.json"), options: .atomic)
     }
@@ -20,6 +56,7 @@ private actor NotePersistenceWriter {
 @Observable
 final class NoteStore {
     private(set) var notes: [Note] = []
+    private(set) var folders: [NoteFolder] = []
     var selectedID: UUID?
     private(set) var loadError: String?
     private(set) var saveError: String?
@@ -38,15 +75,49 @@ final class NoteStore {
         reload()
     }
 
-    func createNote(title: String = "", richText: AttributedString = AttributedString()) {
-        guard loadError == nil else { return }
+    func createNote(title: String = "", richText: AttributedString = AttributedString(), folderID: UUID? = nil) {
+        guard loadError == nil, isValidFolder(folderID) else { return }
         let now = Date()
-        var note = Note(id: UUID(), text: "", createdAt: now, updatedAt: now, title: title)
+        var note = Note(id: UUID(), text: "", createdAt: now, updatedAt: now, title: title, folderID: folderID)
         note.richText = richText
         notes.insert(note, at: 0)
         selectedID = note.id
         hasUnsavedChanges = true
         scheduleSave()
+    }
+
+    @discardableResult
+    func createFolder(name: String) -> UUID? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard loadError == nil, !name.isEmpty else { return nil }
+        let folder = NoteFolder(id: UUID(), name: name)
+        folders.append(folder)
+        hasUnsavedChanges = true
+        scheduleSave()
+        return folder.id
+    }
+
+    func renameFolder(id: UUID, name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard loadError == nil, !name.isEmpty,
+            let index = folders.firstIndex(where: { $0.id == id }), folders[index].name != name
+        else { return }
+        folders[index].name = name
+        hasUnsavedChanges = true
+        scheduleSave()
+    }
+
+    func moveNote(id: UUID, to folderID: UUID?) {
+        guard loadError == nil, isValidFolder(folderID),
+            let index = notes.firstIndex(where: { $0.id == id }), notes[index].folderID != folderID
+        else { return }
+        notes[index].folderID = folderID
+        hasUnsavedChanges = true
+        scheduleSave()
+    }
+
+    private func isValidFolder(_ id: UUID?) -> Bool {
+        id == nil || folders.contains(where: { $0.id == id })
     }
 
     func updateTitle(id: UUID, title: String) {
@@ -101,7 +172,7 @@ final class NoteStore {
         guard loadError == nil, hasUnsavedChanges else { return }
         saveRevision &+= 1
         let revision = saveRevision
-        let snapshot = notes
+        let snapshot = NoteLibrary(folders: folders, notes: notes)
         saveTask?.cancel()
         saveTask = Task { [weak self, writer] in
             do {
@@ -128,18 +199,28 @@ final class NoteStore {
         // Failed writes must not be replaced by an older on-disk snapshot.
         guard !hasUnsavedChanges else { return }
         do {
-            let decodedNotes: [Note]
+            let library: NoteLibrary
             do {
                 let encodedNotes = try Data(contentsOf: notesURL)
-                decodedNotes = try JSONDecoder().decode([Note].self, from: encodedNotes)
+                library = try JSONDecoder().decode(NoteLibrary.self, from: encodedNotes)
             } catch CocoaError.fileReadNoSuchFile {
-                decodedNotes = []
+                library = NoteLibrary()
             }
-            guard Set(decodedNotes.map(\.id)).count == decodedNotes.count else {
+            guard Set(library.notes.map(\.id)).count == library.notes.count,
+                Set(library.folders.map(\.id)).count == library.folders.count
+            else {
                 loadError = "记录文件包含重复标识，已暂停编辑以保护原始内容。请恢复文件后重新读取。"
                 return
             }
-            notes = decodedNotes
+            let folderIDs = Set(library.folders.map(\.id))
+            guard library.folders.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+                library.notes.allSatisfy({ note in note.folderID.map { folderIDs.contains($0) } ?? true })
+            else {
+                loadError = "记录分类无效，已暂停编辑以保护原始内容。请恢复文件后重新读取。"
+                return
+            }
+            notes = library.notes
+            folders = library.folders
             if !notes.contains(where: { $0.id == selectedID }) {
                 selectedID = notes.first?.id
             }

@@ -6,6 +6,29 @@
 
     @MainActor
     struct NativeTableOverlayTests {
+        @Test func codeCopyReportsFailureAndSupportsRetry() {
+            let model = CodeHeaderModel()
+            model.literal = "let value = 42"
+            var received: [String] = []
+            model.writeClipboard = { text in
+                received.append(text)
+                return received.count > 1
+            }
+            model.copyCode()
+            #expect(model.copyStatus == .failed)
+            #expect(model.copyStatus.label == "复制失败，点击重试")
+            let firstAttempt = model.copyAttempt
+            model.copyCode()
+            #expect(model.copyStatus == .copied)
+            #expect(model.copyAttempt > firstAttempt)
+            #expect(received == [model.literal, model.literal])
+            model.resetCopyFeedback()
+            #expect(model.copyStatus == .ready)
+            model.copyCode()
+            model.literal = "changed"
+            #expect(model.copyStatus == .ready)
+        }
+
         private func editor(_ table: TableData) -> NSTextView {
             let view = NSTextView(frame: CGRect(x: 0, y: 0, width: 600, height: 500))
             view.textContainer?.widthTracksTextView = false
@@ -51,6 +74,95 @@
             view.textStorage?.setAttributedString(NSAttributedString(string: "Body"))
             overlay.refresh(in: view, onLanguage: { _, _ in })
             #expect(host.superview == nil)
+        }
+
+        @Test(arguments: [false, true], [220.0, 560.0])
+        func codeHeaderAlignsWithSurfaceAndText(quoted: Bool, width: Double) throws {
+            let view = NSTextView(frame: CGRect(x: 0, y: 0, width: 600, height: 500))
+            let container = try #require(view.textContainer)
+            container.widthTracksTextView = false
+            container.size = CGSize(width: width, height: 10_000)
+            let layout = CodeLayoutManager()
+            container.replaceLayoutManager(layout)
+            let prefix = quoted ? "> " : ""
+            let markdown = ["```swift", "let value = 42", "```"].map { prefix + $0 }.joined(separator: "\n")
+            let native = NativeTextAttributes.native(
+                MarkdownFormatting.render(markdown), context: EnvironmentValues().fontResolutionContext)
+            view.textStorage?.setAttributedString(native)
+            let overlay = CodeHeaderOverlayController()
+            overlay.refresh(in: view, onLanguage: { _, _ in })
+            let host = try #require(view.subviews.compactMap { $0 as? NSHostingView<CodeHeaderView> }.first)
+            let glyphs = layout.glyphRange(forCharacterRange: NSRange(location: 0, length: native.length), actualCharacterRange: nil)
+            let surface = layout.codeBackgroundRect(forGlyphRange: glyphs, in: container).offsetBy(
+                dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y)
+            #expect(abs(host.frame.minX - surface.minX) < 0.5)
+            #expect(abs(host.frame.maxX - surface.maxX) < 0.5)
+            let fragment = layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+            let textX = view.textContainerOrigin.x + fragment.minX + layout.location(forGlyphAt: 0).x
+            #expect(abs(host.frame.minX + DocumentTypography.codeInset - textX) < 0.5)
+        }
+
+        @Test func codeHeaderControlsKeepHandCursorDuringTextViewMouseMovement() throws {
+            let layout = CodeLayoutManager()
+            let storage = NSTextStorage(
+                attributedString: NativeTextAttributes.native(
+                    MarkdownFormatting.render("```swift\nlet value = 42\n```"), context: EnvironmentValues().fontResolutionContext))
+            let container = NSTextContainer(size: CGSize(width: 560, height: 1_000))
+            storage.addLayoutManager(layout)
+            layout.addTextContainer(container)
+            let view = ReadingMacTextView(frame: CGRect(x: 0, y: 0, width: 600, height: 500), textContainer: container)
+            let window = NSWindow(contentRect: view.frame, styleMask: .titled, backing: .buffered, defer: false)
+            window.contentView = view
+            let overlay = CodeHeaderOverlayController()
+            overlay.refresh(in: view, onLanguage: { _, _ in })
+            let host = try #require(view.subviews.compactMap { $0 as? CodeHeaderHostingView }.first)
+            host.layoutSubtreeIfNeeded()
+            defer { NSCursor.arrow.set() }
+            for (x, expected) in [
+                (DocumentTypography.codeInset + 12, NSCursor.pointingHand),
+                (host.bounds.width - DocumentTypography.codeInset - 14, NSCursor.pointingHand),
+                (host.bounds.midX, NSCursor.arrow),
+            ] {
+                let point = NSPoint(x: x, y: host.bounds.midY)
+                #expect(host.cursor(at: point) == expected)
+                let event = try #require(
+                    NSEvent.mouseEvent(
+                        with: .mouseMoved, location: host.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+                view.mouseMoved(with: event)
+                #expect(NSCursor.current == expected)
+            }
+        }
+
+        @Test func consecutiveCodeHeadersKeepTheSameTopPadding() throws {
+            let view = NSTextView(frame: CGRect(x: 0, y: 0, width: 600, height: 600))
+            let container = try #require(view.textContainer)
+            let layout = CodeLayoutManager()
+            container.replaceLayoutManager(layout)
+            let markdown = "```swift\nlet a = 1\n```\n```python\nx = 2\n```\nAfter"
+            let native = NativeTextAttributes.native(
+                MarkdownFormatting.render(markdown), context: EnvironmentValues().fontResolutionContext)
+            view.textStorage?.setAttributedString(native)
+            let overlay = CodeHeaderOverlayController()
+            overlay.refresh(in: view, onLanguage: { _, _ in })
+            let hosts = view.subviews.compactMap { $0 as? NSHostingView<CodeHeaderView> }.sorted { $0.frame.minY < $1.frame.minY }
+            #expect(hosts.count == 2)
+            var ranges: [NSRange] = []
+            native.enumerateAttribute(.weaveCodeStyle, in: NSRange(location: 0, length: native.length)) { value, range, _ in
+                if (value as? String)?.hasPrefix("block:") == true { ranges.append(range) }
+            }
+            var previousBottom: CGFloat?
+            for (host, range) in zip(hosts, ranges) {
+                let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                let surface = layout.codeBackgroundRect(forGlyphRange: glyphs, in: container).offsetBy(
+                    dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y)
+                #expect(surface.minY >= view.textContainerOrigin.y)
+                #expect(abs(host.frame.minY - surface.minY - CodeLayoutManager.codeTopPadding) < 0.5)
+                let used = layout.lineFragmentUsedRect(forGlyphAt: glyphs.location, effectiveRange: nil)
+                #expect(abs(host.frame.maxY - used.minY - view.textContainerOrigin.y) < 0.5)
+                if let previousBottom { #expect(surface.minY >= previousBottom) }
+                previousBottom = surface.maxY
+            }
         }
 
         @Test func tableOverlayReusesHostWhileContentAndDimensionsChange() throws {

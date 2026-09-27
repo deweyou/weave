@@ -23,6 +23,7 @@ struct NoteAttributeScope: AttributeScope {
     let paragraphStyle: ParagraphStyleAttribute
     let quote: QuoteAttribute
     let taskState: TaskStateAttribute
+    let listMarker: ListMarkerAttribute
     let inlineEmphasis: InlineEmphasisAttribute
 }
 
@@ -34,14 +35,632 @@ extension NSAttributedString.Key {
     static let weaveParagraphStyle = NSAttributedString.Key(ParagraphStyleAttribute.name)
     static let weaveQuote = NSAttributedString.Key(QuoteAttribute.name)
     static let weaveQuoteColor = NSAttributedString.Key("weave.quoteColor")
+    static let weaveListMarker = NSAttributedString.Key(ListMarkerAttribute.name)
     static let weaveTaskChecked = NSAttributedString.Key(TaskStateAttribute.name)
     static let weaveInlineSpacing = NSAttributedString.Key("weave.inlineSpacing")
     static let weaveCodeStyle = NSAttributedString.Key(CodeStyleAttribute.name)
 }
 
+/// Keeps normal paragraphs at reading width while unwrapped code gets its own horizontal viewport.
+final class CodeTextContainer: NSTextContainer {
+    override func lineFragmentRect(
+        forProposedRect proposedRect: CGRect, at characterIndex: Int,
+        writingDirection: NSWritingDirection, remaining remainingRect: UnsafeMutablePointer<CGRect>?
+    ) -> CGRect {
+        var rect = super.lineFragmentRect(
+            forProposedRect: proposedRect, at: characterIndex, writingDirection: writingDirection, remaining: remainingRect)
+        guard let layout = layoutManager as? CodeLayoutManager, let storage = layout.textStorage,
+            characterIndex < storage.length,
+            let id = storage.attribute(.weaveCodeStyle, at: characterIndex, effectiveRange: nil) as? String,
+            id.hasPrefix("block:")
+        else { return rect }
+        let gutter = layout.codeGutterWidth(at: characterIndex)
+        if layout.unwrappedCode.contains(id) {
+            rect.origin.x = -(layout.codeScrollOffsets[id] ?? 0)
+            rect.size.width = max(size.width, layout.codeLineWidths[id] ?? size.width)
+        }
+        rect.origin.x += gutter
+        rect.size.width = max(1, rect.width - gutter)
+        return rect
+    }
+}
+
 /// Draw code surfaces behind text while retaining native selection, caret and scrolling.
 final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
+    private(set) var unwrappedCode: Set<String> = []
+    private(set) var codeLineWidths: [String: CGFloat] = [:]
+    private(set) var codeScrollOffsets: [String: CGFloat] = [:]
+
+    private var codeGutters: [String: CGFloat] = [:]
+
+    private func codeNumberFont(at character: Int) -> PlatformFont {
+        let font = textStorage?.attribute(.font, at: character, effectiveRange: nil) as? PlatformFont
+        return .monospacedDigitSystemFont(ofSize: max(10, (font?.pointSize ?? DocumentTypography.bodySize) - 2), weight: .regular)
+    }
+
+    func codeGutterWidth(at character: Int) -> CGFloat {
+        guard let storage = textStorage, character < storage.length else { return 0 }
+        var range = NSRange()
+        guard
+            let id = storage.attribute(
+                .weaveCodeStyle, at: character, longestEffectiveRange: &range,
+                in: NSRange(location: 0, length: storage.length)) as? String, id.hasPrefix("block:")
+        else { return 0 }
+        if character != range.location, let width = codeGutters[id] { return width }
+        let source = storage.string as NSString
+        var count = 0
+        var cursor = range.location
+        while cursor < NSMaxRange(range) {
+            count += 1
+            cursor = NSMaxRange(source.lineRange(for: NSRange(location: cursor, length: 0)))
+        }
+        if NSMaxRange(range) == storage.length, storage.string.hasSuffix("\n") { count += 1 }
+        let digits = max(2, String(count).count)
+        let width =
+            ceil((String(repeating: "0", count: digits) as NSString).size(withAttributes: [.font: codeNumberFont(at: character)]).width)
+            + 12
+        codeGutters[id] = width
+        return width
+    }
+
+    struct CodeLineNumber {
+        let number: Int
+        let character: Int
+        let rect: CGRect
+    }
+
+    func codeLineNumbers(in container: NSTextContainer) -> [CodeLineNumber] {
+        guard let storage = textStorage else { return [] }
+        let source = storage.string as NSString
+        var labels: [CodeLineNumber] = []
+        storage.enumerateAttribute(.weaveCodeStyle, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let id = value as? String, id.hasPrefix("block:") else { return }
+            let glyphs = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let surface = self.codeBackgroundRect(forGlyphRange: glyphs, in: container)
+            let gutter = self.codeGutterWidth(at: range.location)
+            let font = self.codeNumberFont(at: range.location)
+            let left = surface.minX + DocumentTypography.codeInset
+            let top = surface.minY + Self.codeTopPadding + Self.headerHeight
+            let bottom = surface.maxY - DocumentTypography.codeInset
+            var cursor = range.location
+            var number = 1
+            while cursor < NSMaxRange(range) {
+                let glyph = self.glyphIndexForCharacter(at: cursor)
+                let baseline = self.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY + self.location(forGlyphAt: glyph).y
+                let rect = CGRect(x: left, y: baseline - font.ascender, width: gutter - 12, height: font.ascender - font.descender)
+                if rect.maxY > top, rect.minY < bottom {
+                    labels.append(CodeLineNumber(number: number, character: cursor, rect: rect))
+                }
+                cursor = NSMaxRange(source.lineRange(for: NSRange(location: cursor, length: 0)))
+                number += 1
+            }
+            if NSMaxRange(range) == storage.length, storage.string.hasSuffix("\n"), self.extraLineFragmentUsedRect.height > 0 {
+                let rect = CGRect(
+                    x: left, y: self.extraLineFragmentUsedRect.minY, width: gutter - 12, height: font.ascender - font.descender)
+                labels.append(CodeLineNumber(number: number, character: storage.length, rect: rect))
+            }
+        }
+        return labels
+    }
+
+    private func drawCodeLineNumbers(at origin: CGPoint) {
+        guard let container = textContainers.first, let storage = textStorage, storage.length > 0 else { return }
+        for label in codeLineNumbers(in: container) {
+            let character = min(label.character, storage.length - 1)
+            let font = codeNumberFont(at: character)
+            #if os(macOS)
+                let color = NSColor.secondaryLabelColor
+                let context = NSGraphicsContext.current?.cgContext
+            #else
+                let color = UIColor.secondaryLabel
+                let context = UIGraphicsGetCurrentContext()
+            #endif
+            var range = NSRange()
+            _ = storage.attribute(
+                .weaveCodeStyle, at: character, longestEffectiveRange: &range,
+                in: NSRange(location: 0, length: storage.length))
+            var clip = codeBackgroundRect(forGlyphRange: glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: container)
+            clip.origin.y += Self.codeTopPadding + Self.headerHeight
+            clip.size.height -= Self.codeTopPadding + Self.headerHeight + DocumentTypography.codeInset
+            context?.saveGState()
+            context?.clip(to: clip.offsetBy(dx: origin.x, dy: origin.y))
+            let text = String(label.number) as NSString
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+            let width = text.size(withAttributes: attributes).width
+            text.draw(at: CGPoint(x: origin.x + label.rect.maxX - width, y: origin.y + label.rect.minY), withAttributes: attributes)
+            context?.restoreGState()
+        }
+    }
+
+    static let codeMaximumHeight: CGFloat = 400
+    static var codeContentHeight: CGFloat {
+        codeMaximumHeight - headerHeight - codeTopPadding - DocumentTypography.codeInset
+    }
+    private(set) var expandedCode: Set<String> = []
+
+    func canExpandCode(id: String) -> Bool {
+        (codeViewports[id]?.contentHeight ?? 0) > Self.codeContentHeight
+    }
+
+    private func contentHeightLimit(id: String) -> CGFloat {
+        expandedCode.contains(id) ? CGFloat.greatestFiniteMagnitude : Self.codeContentHeight
+    }
+
+    func setCodeExpanded(_ expanded: Bool, id: String, in container: NSTextContainer) {
+        if expanded { expandedCode.insert(id) } else { expandedCode.remove(id) }
+        codeVerticalOffsets[id] = 0
+        textContainerChangedGeometry(container)
+        ensureLayout(for: container)
+    }
+
+    struct CodeOverflowEdges {
+        let top: Bool
+        let bottom: Bool
+        let left: Bool
+        let right: Bool
+    }
+
+    func codeOverflowEdges(id: String, in container: NSTextContainer) -> CodeOverflowEdges {
+        let vertical = codeVerticalLimit(id: id)
+        let horizontal = unwrappedCode.contains(id) ? max(0, (codeLineWidths[id] ?? 0) - container.size.width) : 0
+        let x = codeScrollOffsets[id] ?? 0
+        let y = codeVerticalOffsets[id] ?? 0
+        return CodeOverflowEdges(
+            top: vertical > 0 && y > 0.5, bottom: y < vertical - 0.5,
+            left: horizontal > 0 && x > 0.5, right: x < horizontal - 0.5)
+    }
+
+    private struct CodeLine {
+        let characters: NSRange
+        let top: CGFloat
+        let advance: CGFloat
+        let height: CGFloat
+    }
+    private struct CodeViewport {
+        var top: CGFloat
+        var lines: [Int: CodeLine] = [:]
+        var contentHeight: CGFloat = 0
+        var nextCharacter: Int = 0
+        var nextTop: CGFloat = 0
+    }
+    private var codeViewports: [String: CodeViewport] = [:]
+    private(set) var codeVerticalOffsets: [String: CGFloat] = [:]
+
+    func codeVerticalLimit(id: String) -> CGFloat {
+        max(0, (codeViewports[id]?.contentHeight ?? 0) - contentHeightLimit(id: id))
+    }
+
+    func scrollCodeVertically(id: String, delta: CGFloat, in container: NSTextContainer, showIndicator: Bool = false) {
+        let limit = codeVerticalLimit(id: id)
+        if showIndicator, limit > 0, delta != 0 { showCodeIndicatorRespectingMotion(id: id) }
+        let offset = min(limit, max(0, (codeVerticalOffsets[id] ?? 0) + delta))
+        guard offset != (codeVerticalOffsets[id] ?? 0) else { return }
+        codeVerticalOffsets[id] = offset
+        textContainerChangedGeometry(container)
+        ensureLayout(for: container)
+    }
+
+    func scrollableCode(at point: CGPoint, in container: NSTextContainer, vertical: Bool) -> String? {
+        guard let storage = textStorage else { return nil }
+        ensureLayout(for: container)
+        var found: String?
+        storage.enumerateAttribute(.weaveCodeStyle, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
+            guard let id = value as? String,
+                vertical ? self.codeVerticalLimit(id: id) > 0 : self.unwrappedCode.contains(id)
+            else { return }
+            let glyphs = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            if self.codeBackgroundRect(forGlyphRange: glyphs, in: container).contains(point) {
+                found = id
+                stop.pointee = true
+            }
+        }
+        return found
+    }
+
+    // Keep full text and UTF-16 ranges in native storage. Each visual line only
+    // contributes its intersection with the block viewport to document height;
+    // glyph baselines retain their unclipped position and drawing clips at the
+    // fixed viewport. The natural line map also makes hidden caret targets visible.
+    private func constrainCodeLine(
+        id: String, range: NSRange, character: Int, glyphs: NSRange,
+        fragment: UnsafeMutablePointer<CGRect>, used: UnsafeMutablePointer<CGRect>, baseline: UnsafeMutablePointer<CGFloat>
+    ) {
+        guard let storage = textStorage else { return }
+        let characters = characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+        let paragraph = storage.attribute(.paragraphStyle, at: character, effectiveRange: nil) as? NSParagraphStyle
+        let lastCharacter = (storage.string as NSString).character(at: NSMaxRange(characters) - 1)
+        let trailing = lastCharacter == 10 || lastCharacter == 0x2029 ? paragraph?.paragraphSpacing ?? 0 : 0
+        let leading = max(0, used.pointee.minY - fragment.pointee.minY)
+        let advance = max(0, fragment.pointee.height - leading - trailing)
+        if character == range.location {
+            codeViewports[id] = CodeViewport(top: used.pointee.minY)
+        }
+        guard var viewport = codeViewports[id] else { return }
+        let top: CGFloat
+        if viewport.nextCharacter == character {
+            top = viewport.nextTop
+        } else {
+            let preceding = viewport.lines.values.filter { NSMaxRange($0.characters) <= character }.max { $0.top < $1.top }
+            top = preceding.map { $0.top + $0.advance } ?? 0
+            viewport.lines = viewport.lines.filter { $0.key < character }
+        }
+        viewport.nextCharacter = NSMaxRange(characters)
+        viewport.nextTop = top + advance
+        viewport.lines[character] = CodeLine(characters: characters, top: top, advance: advance, height: used.pointee.height)
+        viewport.contentHeight = top + used.pointee.height
+        codeViewports[id] = viewport
+        let offset = codeVerticalOffsets[id] ?? 0
+        let start = min(contentHeightLimit(id: id), max(0, top - offset))
+        let end = min(contentHeightLimit(id: id), max(0, top + advance - offset))
+        let actualTop = viewport.top + top - offset
+        let visibleTop = viewport.top + start
+        let visibleBottom = min(viewport.top + contentHeightLimit(id: id), actualTop + used.pointee.height)
+        let baselineFromUsed = baseline.pointee - leading
+        fragment.pointee.size.height = leading + end - start + trailing
+        used.pointee.origin.y = visibleTop
+        used.pointee.size.height = max(0, visibleBottom - visibleTop)
+        baseline.pointee = actualTop - fragment.pointee.minY + baselineFromUsed
+    }
+
+    weak var codeDisplayView: PlatformTextView?
+    private struct ScrollIndicator {
+        var start: TimeInterval
+        var lastActivity: TimeInterval
+        var startOpacity: CGFloat
+        var reducedMotion: Bool
+
+        func opacity(at time: TimeInterval) -> CGFloat {
+            let elapsed = max(0, time - start)
+            let idle = max(0, time - lastActivity - 0.65)
+            if reducedMotion { return idle > 0 ? 0 : 1 }
+            let fadeIn = min(1, elapsed / 0.12)
+            let fadeOut = min(1, idle / 0.25)
+            return (startOpacity + (1 - startOpacity) * fadeIn) * (1 - fadeOut)
+        }
+    }
+    private var scrollIndicators: [String: ScrollIndicator] = [:]
+    private var indicatorTimer: Timer?
+
+    func codeIndicatorOpacity(id: String, at time: TimeInterval = ProcessInfo.processInfo.systemUptime) -> CGFloat {
+        scrollIndicators[id]?.opacity(at: time) ?? 0
+    }
+
+    func showCodeIndicator(id: String, at time: TimeInterval = ProcessInfo.processInfo.systemUptime, reducedMotion: Bool = false) {
+        if var indicator = scrollIndicators[id], time - indicator.lastActivity <= 0.65 {
+            indicator.lastActivity = time
+            scrollIndicators[id] = indicator
+        } else {
+            scrollIndicators[id] = ScrollIndicator(
+                start: time, lastActivity: time, startOpacity: codeIndicatorOpacity(id: id, at: time), reducedMotion: reducedMotion)
+        }
+        guard indicatorTimer == nil else { return }
+        let target = CodeIndicatorClock()
+        target.layout = self
+        let timer = Timer(timeInterval: 1 / 60, target: target, selector: #selector(CodeIndicatorClock.tick), userInfo: nil, repeats: true)
+        indicatorTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func showCodeIndicatorRespectingMotion(id: String) {
+        // Native scroll callbacks are delivered on the main thread.
+        let reducedMotion = MainActor.assumeIsolated {
+            #if os(macOS)
+                NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            #else
+                UIAccessibility.isReduceMotionEnabled
+            #endif
+        }
+        showCodeIndicator(id: id, reducedMotion: reducedMotion)
+    }
+
+    func updateCodeIndicators(at time: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        scrollIndicators = scrollIndicators.filter { time - $0.value.lastActivity < ($0.value.reducedMotion ? 0.65 : 0.9) }
+        // The native editor and this common-mode timer both run on the main thread.
+        // Redraw the view because the indicator is below the glyph invalidation rect.
+        let view = codeDisplayView
+        MainActor.assumeIsolated {
+            #if os(macOS)
+                view?.needsDisplay = true
+            #else
+                view?.setNeedsDisplay()
+            #endif
+        }
+        if scrollIndicators.isEmpty {
+            indicatorTimer?.invalidate()
+            indicatorTimer = nil
+        }
+    }
+
+    func updateCodeWidth(id: String, range: NSRange, in container: NSTextContainer) {
+        guard let storage = textStorage else { return }
+        let source = storage.string as NSString
+        var width: CGFloat = 0
+        var index = range.location
+        while index < NSMaxRange(range) {
+            let line = NSIntersectionRange(source.lineRange(for: NSRange(location: index, length: 0)), range)
+            let text = storage.attributedSubstring(from: line)
+            width = max(width, CGFloat(CTLineGetTypographicBounds(CTLineCreateWithAttributedString(text), nil, nil, nil)))
+            index = NSMaxRange(line)
+        }
+        let quote = storage.attribute(.weaveQuote, at: range.location, effectiveRange: nil) as? Bool == true
+        width =
+            ceil(width) + 2 * (container.lineFragmentPadding + DocumentTypography.codeInset) + (quote ? DocumentTypography.quoteIndent : 0)
+            + 1
+        let oldGutter = codeGutters[id]
+        let gutter = codeGutterWidth(at: range.location)
+        width += gutter
+        if oldGutter != gutter { invalidateLayout(forCharacterRange: range, actualCharacterRange: nil) }
+        let oldWidth = codeLineWidths[id]
+        let oldOffset = codeScrollOffsets[id]
+        codeLineWidths[id] = width
+        codeScrollOffsets[id] = min(codeScrollOffsets[id] ?? 0, max(0, width - container.size.width))
+        if unwrappedCode.contains(id), oldWidth != width || oldOffset != codeScrollOffsets[id] {
+            invalidateLayout(forCharacterRange: range, actualCharacterRange: nil)
+        }
+    }
+
+    func setCodeWrapping(_ wraps: Bool, id: String) {
+        if wraps { unwrappedCode.remove(id) } else { unwrappedCode.insert(id) }
+        codeScrollOffsets[id] = 0
+        codeVerticalOffsets[id] = 0
+        scrollIndicators[id] = nil
+        if let storage = textStorage {
+            invalidateLayout(forCharacterRange: NSRange(location: 0, length: storage.length), actualCharacterRange: nil)
+        }
+    }
+
+    func scrollCode(id: String, delta: CGFloat, in container: NSTextContainer, showIndicator: Bool = false) {
+        guard unwrappedCode.contains(id) else { return }
+        let limit = max(0, (codeLineWidths[id] ?? 0) - container.size.width)
+        if showIndicator, limit > 0, delta != 0 {
+            showCodeIndicatorRespectingMotion(id: id)
+        }
+        let offset = min(limit, max(0, (codeScrollOffsets[id] ?? 0) + delta))
+        guard offset != codeScrollOffsets[id] else { return }
+        codeScrollOffsets[id] = offset
+        textContainerChangedGeometry(container)
+    }
+
+    func unwrappedCode(at point: CGPoint, in container: NSTextContainer) -> String? {
+        scrollableCode(at: point, in: container, vertical: false)
+    }
+
+    func clampCodeViewports(in container: NSTextContainer) {
+        ensureLayout(for: container)
+        var changed = false
+        for (id, offset) in codeVerticalOffsets {
+            let clamped = min(offset, codeVerticalLimit(id: id))
+            if clamped != offset {
+                codeVerticalOffsets[id] = clamped
+                changed = true
+            }
+        }
+        if changed {
+            textContainerChangedGeometry(container)
+            ensureLayout(for: container)
+        }
+    }
+
+    override func setExtraLineFragmentRect(_ fragmentRect: CGRect, usedRect: CGRect, textContainer: NSTextContainer) {
+        guard let storage = textStorage, storage.length > 0, storage.string.hasSuffix("\n"),
+            let id = storage.attribute(.weaveCodeStyle, at: storage.length - 1, effectiveRange: nil) as? String,
+            var viewport = codeViewports[id],
+            let paragraph = storage.attribute(.paragraphStyle, at: storage.length - 1, effectiveRange: nil) as? NSParagraphStyle
+        else {
+            super.setExtraLineFragmentRect(fragmentRect, usedRect: usedRect, textContainer: textContainer)
+            return
+        }
+        let height = paragraph.minimumLineHeight + paragraph.lineSpacing
+        viewport.contentHeight = viewport.nextTop + height
+        codeViewports[id] = viewport
+        var fragment = fragmentRect
+        var used = usedRect
+        if textContainer is CodeTextContainer {
+            let gutter = codeGutterWidth(at: storage.length - 1)
+            fragment.origin.x = gutter - (codeScrollOffsets[id] ?? 0)
+            fragment.size.width = max(1, fragment.width - gutter)
+            used.origin.x = fragment.minX + textContainer.lineFragmentPadding + paragraph.firstLineHeadIndent
+        }
+        let top = viewport.nextTop - (codeVerticalOffsets[id] ?? 0)
+        fragment.origin.y = viewport.top + min(contentHeightLimit(id: id), max(0, top))
+        fragment.size.height = max(0, min(contentHeightLimit(id: id), top + height) - max(0, top))
+        used.origin.y = fragment.minY
+        used.size.height = min(used.height, fragment.height)
+        super.setExtraLineFragmentRect(fragment, usedRect: used, textContainer: textContainer)
+    }
+
+    func prepareCodeVerticalMovement(from index: Int, down: Bool, in container: NSTextContainer) {
+        guard let storage = textStorage, storage.length > 0 else { return }
+        ensureLayout(for: container)
+        let character = min(index, storage.length - 1)
+        guard let id = storage.attribute(.weaveCodeStyle, at: character, effectiveRange: nil) as? String,
+            codeVerticalLimit(id: id) > 0, let viewport = codeViewports[id]
+        else {
+            let paragraph = (storage.string as NSString).paragraphRange(for: NSRange(location: character, length: 0))
+            let neighbor = down ? NSMaxRange(paragraph) : paragraph.location - 1
+            if neighbor >= 0, neighbor < storage.length { revealCodeCaret(at: neighbor, in: container, horizontally: false) }
+            return
+        }
+        let lines = viewport.lines.values.sorted { $0.characters.location < $1.characters.location }
+        guard let current = lines.firstIndex(where: { NSLocationInRange(character, $0.characters) }) else { return }
+        let isTrailingBlank = index == storage.length && storage.string.hasSuffix("\n")
+        let adjacent = current + (isTrailingBlank ? 1 : 0) + (down ? 1 : -1)
+        guard lines.indices.contains(adjacent) else { return }
+        // Give TextKit real visible geometry for the adjacent visual line before
+        // it performs native column-preserving movement or extends a selection.
+        revealCodeCaret(at: lines[adjacent].characters.location, in: container, horizontally: false)
+    }
+
+    func revealCodeCaret(at index: Int, in container: NSTextContainer, horizontally: Bool = true) {
+        guard let storage = textStorage, storage.length > 0, index <= storage.length else { return }
+        let character = min(index, storage.length - 1)
+        guard let id = storage.attribute(.weaveCodeStyle, at: character, effectiveRange: nil) as? String,
+            id.hasPrefix("block:")
+        else { return }
+        ensureLayout(for: container)
+        if let viewport = codeViewports[id],
+            var line = viewport.lines.values.first(where: { NSLocationInRange(character, $0.characters) })
+        {
+            if index == storage.length, storage.string.hasSuffix("\n") {
+                line = CodeLine(
+                    characters: NSRange(location: index, length: 0), top: viewport.nextTop,
+                    advance: line.advance, height: viewport.contentHeight - viewport.nextTop)
+            }
+            let offset = codeVerticalOffsets[id] ?? 0
+            if line.top < offset { scrollCodeVertically(id: id, delta: line.top - offset, in: container) }
+            if line.top + line.height > offset + contentHeightLimit(id: id) {
+                scrollCodeVertically(id: id, delta: line.top + line.height - offset - contentHeightLimit(id: id), in: container)
+            }
+        }
+        guard horizontally, unwrappedCode.contains(id) else { return }
+        let glyph = glyphIndexForCharacter(at: character)
+        let fragment = lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        var x = fragment.minX + location(forGlyphAt: glyph).x
+        if index == storage.length {
+            x =
+                storage.string.hasSuffix("\n")
+                ? fragment.minX + container.lineFragmentPadding + DocumentTypography.codeInset
+                : lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil).maxX - DocumentTypography.codeInset
+        }
+        let quote = storage.attribute(.weaveQuote, at: character, effectiveRange: nil) as? Bool == true
+        let left =
+            container.lineFragmentPadding + DocumentTypography.codeInset + codeGutterWidth(at: character)
+            + (quote ? DocumentTypography.quoteIndent : 0)
+        let right = container.size.width - container.lineFragmentPadding - DocumentTypography.codeInset
+        if x < left { scrollCode(id: id, delta: x - left, in: container) }
+        if x > right { scrollCode(id: id, delta: x - right + 1, in: container) }
+    }
+
+    private func drawNativeText(for glyphs: NSRange, at origin: CGPoint, background: Bool) {
+        guard let storage = textStorage else { return }
+        let characters = characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+        storage.enumerateAttribute(.weaveCodeStyle, in: characters) { value, range, _ in
+            let part = NSIntersectionRange(glyphs, self.glyphRange(forCharacterRange: range, actualCharacterRange: nil))
+            guard part.length > 0 else { return }
+            #if os(macOS)
+                let context = NSGraphicsContext.current?.cgContext
+            #else
+                let context = UIGraphicsGetCurrentContext()
+            #endif
+            context?.saveGState()
+            if let id = value as? String, id.hasPrefix("block:"),
+                let container = self.textContainer(forGlyphAt: part.location, effectiveRange: nil)
+            {
+                var blockRange = NSRange()
+                _ = storage.attribute(
+                    .weaveCodeStyle, at: range.location, longestEffectiveRange: &blockRange,
+                    in: NSRange(location: 0, length: storage.length))
+                let blockGlyphs = self.glyphRange(forCharacterRange: blockRange, actualCharacterRange: nil)
+                var clip = self.codeBackgroundRect(forGlyphRange: blockGlyphs, in: container)
+                let gutter = self.codeGutterWidth(at: blockRange.location)
+                clip.origin.x += DocumentTypography.codeInset + gutter
+                clip.size.width -= 2 * DocumentTypography.codeInset + gutter
+                clip.origin.y += Self.codeTopPadding + Self.headerHeight
+                clip.size.height -= Self.codeTopPadding + Self.headerHeight + DocumentTypography.codeInset
+                context?.clip(to: clip.offsetBy(dx: origin.x, dy: origin.y))
+            }
+            if background {
+                super.drawBackground(forGlyphRange: part, at: origin)
+            } else {
+                super.drawGlyphs(forGlyphRange: part, at: origin)
+            }
+            context?.restoreGState()
+        }
+    }
+
+    #if os(macOS)
+        private struct LinkTransition {
+            var value: CGFloat
+            var start: CGFloat
+            var target: CGFloat
+        }
+        private var linkTransitions: [NSRange: LinkTransition] = [:]
+        private var linkAnimation: LinkHoverAnimation?
+        var shouldReduceLinkHoverMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+        var hoveredLinkRange: NSRange? {
+            didSet {
+                guard hoveredLinkRange != oldValue else { return }
+                linkAnimation?.stop()
+                for range in Array(linkTransitions.keys) {
+                    guard var transition = linkTransitions[range] else { continue }
+                    transition.start = transition.value
+                    transition.target = 0
+                    linkTransitions[range] = transition
+                }
+                if let range = hoveredLinkRange {
+                    let value = linkTransitions[range]?.value ?? 0
+                    linkTransitions[range] = LinkTransition(value: value, start: value, target: 1)
+                }
+                guard !shouldReduceLinkHoverMotion() else {
+                    updateLinkHoverAnimation(progress: 1)
+                    return
+                }
+                let animation = LinkHoverAnimation(duration: 0.16, animationCurve: .easeInOut)
+                animation.layout = self
+                animation.frameRate = 60
+                animation.animationBlockingMode = .nonblocking
+                linkAnimation = animation
+                animation.start()
+            }
+        }
+
+        func clearLinkHover() {
+            hoveredLinkRange = nil
+            linkAnimation?.stop()
+            for range in linkTransitions.keys { invalidateLinkDisplay(range) }
+            linkTransitions.removeAll()
+            linkAnimation = nil
+        }
+
+        func updateLinkHoverAnimation(progress: CGFloat) {
+            for range in Array(linkTransitions.keys) {
+                guard var transition = linkTransitions[range] else { continue }
+                transition.value = transition.start + (transition.target - transition.start) * progress
+                linkTransitions[range] = progress >= 1 && transition.target == 0 ? nil : transition
+                invalidateLinkDisplay(range)
+            }
+        }
+
+        private func invalidateLinkDisplay(_ range: NSRange) {
+            let valid = NSIntersectionRange(range, NSRange(location: 0, length: textStorage?.length ?? 0))
+            if valid.length > 0 { invalidateDisplay(forCharacterRange: valid) }
+        }
+
+        func layoutManager(
+            _ layoutManager: NSLayoutManager, shouldUseTemporaryAttributes attrs: [NSAttributedString.Key: Any],
+            forDrawingToScreen toScreen: Bool, atCharacterIndex charIndex: Int, effectiveRange: NSRangePointer?
+        ) -> [NSAttributedString.Key: Any]? {
+            guard toScreen, !linkTransitions.isEmpty else { return attrs }
+            let hover = linkTransitions.keys.first { NSLocationInRange(charIndex, $0) }
+            if hover == nil {
+                if let effectiveRange,
+                    let next = linkTransitions.keys.filter({ $0.location > charIndex }).map(\.location).min()
+                {
+                    effectiveRange.pointee.length =
+                        min(NSMaxRange(effectiveRange.pointee), next) - effectiveRange.pointee.location
+                }
+                return attrs
+            }
+            guard let hover, let transition = linkTransitions[hover] else { return attrs }
+            if let effectiveRange {
+                effectiveRange.pointee = NSIntersectionRange(effectiveRange.pointee, hover)
+            }
+            guard let storage = textStorage, charIndex < storage.length,
+                storage.attribute(.link, at: charIndex, effectiveRange: nil) != nil
+            else { return attrs }
+            var result = attrs
+            let foreground =
+                attrs[.foregroundColor] as? NSColor
+                ?? storage.attribute(.foregroundColor, at: charIndex, effectiveRange: nil) as? NSColor ?? .labelColor
+            let underline = attrs[.underlineColor] as? NSColor ?? .secondaryLabelColor
+            result[.foregroundColor] = foreground.blended(withFraction: transition.value, of: AppTheme.nativeAccent) ?? foreground
+            result[.underlineColor] = underline.blended(withFraction: transition.value, of: AppTheme.nativeAccent) ?? underline
+            result[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            return result
+        }
+    #endif
     static let headerHeight = DocumentTypography.codeHeaderHeight
+    static let codeTopPadding: CGFloat = 12
     #if os(macOS)
         private struct BaselineKey: Hashable {
             let fontSize: CGFloat
@@ -77,15 +696,30 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         }
     }
 
+    func codeHeaderY(forGlyph glyph: Int) -> CGFloat {
+        if let storage = textStorage, characterIndexForGlyph(at: glyph) < storage.length,
+            let id = storage.attribute(.weaveCodeStyle, at: characterIndexForGlyph(at: glyph), effectiveRange: nil) as? String,
+            let viewport = codeViewports[id]
+        {
+            return viewport.top - Self.headerHeight
+        }
+        let used = lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+        #if os(macOS)
+            return used.minY - Self.headerHeight
+        #else
+            return used.minY
+        #endif
+    }
+
     func codeBackgroundRect(forGlyphRange glyphs: NSRange, in container: NSTextContainer) -> CGRect {
         var bounds = CGRect.null
         enumerateLineFragments(forGlyphRange: glyphs) { fragment, used, _, lineGlyphs, _ in
             var surface = used
             #if os(macOS)
-                surface.size.height += self.interLineSpacing(for: self.characterRange(forGlyphRange: lineGlyphs, actualGlyphRange: nil))
                 if lineGlyphs.location == glyphs.location {
-                    surface.size.height += surface.minY - fragment.minY
-                    surface.origin.y = fragment.minY
+                    let headerY = self.codeHeaderY(forGlyph: lineGlyphs.location)
+                    surface.size.height += surface.minY - headerY
+                    surface.origin.y = headerY
                 }
             #endif
             bounds = bounds.union(surface)
@@ -112,7 +746,16 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         }
         bounds.origin.x = container.lineFragmentPadding + quoteInset
         bounds.size.width = max(0, container.size.width - 2 * container.lineFragmentPadding - quoteInset)
-        var surface = bounds.insetBy(dx: 0, dy: -8)
+        if let storage = textStorage,
+            let id = storage.attribute(.weaveCodeStyle, at: characterIndexForGlyph(at: glyphs.location), effectiveRange: nil) as? String,
+            let viewport = codeViewports[id]
+        {
+            bounds.origin.y = viewport.top - Self.headerHeight
+            bounds.size.height = Self.headerHeight + min(contentHeightLimit(id: id), viewport.contentHeight)
+        }
+        var surface = bounds
+        surface.origin.y -= Self.codeTopPadding
+        surface.size.height += Self.codeTopPadding + DocumentTypography.codeInset
         if let storage = textStorage, glyphs.length > 0 {
             let source = storage.string as NSString
             let characters = characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
@@ -286,9 +929,13 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
                 stableContentHeight = nil
             }
             if let stableContentHeight {
+                // TextKit puts paragraphSpacingBefore inside the first fragment,
+                // above its used rect. Preserve that offset in both the line box
+                // and baseline so glyphs stay aligned with native caret/selection.
+                let contentOffset = max(0, lineFragmentUsedRect.pointee.minY - lineFragmentRect.pointee.minY)
                 let last = (storage.string as NSString).character(at: NSMaxRange(characters) - 1)
                 let paragraphSpacing = last == 10 || last == 0x2029 ? paragraph?.paragraphSpacing ?? 0 : 0
-                lineFragmentRect.pointee.size.height = stableContentHeight + spacing + paragraphSpacing
+                lineFragmentRect.pointee.size.height = contentOffset + stableContentHeight + spacing + paragraphSpacing
                 lineFragmentUsedRect.pointee.size.height = stableContentHeight + spacing * DocumentTypography.selectionLineSpacingShare
                 if let font {
                     let baseFontSize =
@@ -298,10 +945,12 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
                     // TextKit substitutes PingFang while composing or committing
                     // CJK text. Its leading differs from SF by about half a point,
                     // so normalize the baseline as well as the line box.
-                    baselineOffset.pointee = stableBaselineOffset(
-                        fontSize: baseFontSize,
-                        lineHeight: stableContentHeight
-                    )
+                    baselineOffset.pointee =
+                        contentOffset
+                        + stableBaselineOffset(
+                            fontSize: baseFontSize,
+                            lineHeight: stableContentHeight
+                        )
                 }
             } else {
                 lineFragmentUsedRect.pointee.size.height -= spacing * (1 - DocumentTypography.selectionLineSpacingShare)
@@ -311,17 +960,20 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         guard
             let id = storage.attribute(
                 .weaveCodeStyle, at: character, longestEffectiveRange: &range, in: NSRange(location: 0, length: storage.length)) as? String,
-            id.hasPrefix("block:"), character == range.location
+            id.hasPrefix("block:")
         else { return true }
         // TextKit ignores paragraphSpacingBefore at the start of a document.
-        // Reserve the header in the first code line's layout, without inserting text.
-        lineFragmentRect.pointee.size.height += Self.headerHeight
-        #if os(macOS)
-            lineFragmentUsedRect.pointee.origin.y += Self.headerHeight
-        #else
-            lineFragmentUsedRect.pointee.size.height += Self.headerHeight
-        #endif
-        baselineOffset.pointee += Self.headerHeight
+        // Reserve both the header and the first block's upper surface padding;
+        // drawing above the first line otherwise clips off its rounded corners.
+        if character == range.location {
+            let topPadding = character == 0 ? Self.codeTopPadding : 0
+            lineFragmentRect.pointee.size.height += Self.headerHeight + topPadding
+            lineFragmentUsedRect.pointee.origin.y += Self.headerHeight + topPadding
+            baselineOffset.pointee += Self.headerHeight + topPadding
+        }
+        constrainCodeLine(
+            id: id, range: range, character: character, glyphs: glyphRange,
+            fragment: lineFragmentRect, used: lineFragmentUsedRect, baseline: baselineOffset)
         return true
     }
 
@@ -355,6 +1007,39 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
             if style.hasPrefix("block:") {
                 let rect = self.codeBackgroundRect(forGlyphRange: glyphs, in: container).offsetBy(dx: origin.x, dy: origin.y)
                 self.fill(rect, radius: 8)
+                let verticalLimit = self.codeVerticalLimit(id: style)
+                if verticalLimit > 0 {
+                    let track = CGRect(
+                        x: rect.maxX - 7, y: rect.minY + Self.codeTopPadding + Self.headerHeight,
+                        width: 3, height: Self.codeContentHeight)
+                    let thumbHeight = max(24, track.height * Self.codeContentHeight / (Self.codeContentHeight + verticalLimit))
+                    let progress = min(1, (self.codeVerticalOffsets[style] ?? 0) / verticalLimit)
+                    #if os(macOS)
+                        NSColor.secondaryLabelColor.withAlphaComponent(0.45 * self.codeIndicatorOpacity(id: style)).setFill()
+                    #else
+                        UIColor.secondaryLabel.withAlphaComponent(0.45 * self.codeIndicatorOpacity(id: style)).setFill()
+                    #endif
+                    self.fill(
+                        CGRect(
+                            x: track.minX, y: track.minY + (track.height - thumbHeight) * progress,
+                            width: track.width, height: thumbHeight), radius: 1.5)
+                }
+                if self.unwrappedCode.contains(style), let width = self.codeLineWidths[style], width > container.size.width {
+                    let track = CGRect(
+                        x: rect.minX + DocumentTypography.codeInset, y: rect.maxY - 7,
+                        width: max(0, rect.width - 2 * DocumentTypography.codeInset), height: 3)
+                    let thumbWidth = max(24, track.width * container.size.width / width)
+                    let progress = (self.codeScrollOffsets[style] ?? 0) / (width - container.size.width)
+                    #if os(macOS)
+                        NSColor.secondaryLabelColor.withAlphaComponent(0.45 * self.codeIndicatorOpacity(id: style)).setFill()
+                    #else
+                        UIColor.secondaryLabel.withAlphaComponent(0.45 * self.codeIndicatorOpacity(id: style)).setFill()
+                    #endif
+                    self.fill(
+                        CGRect(
+                            x: track.minX + (track.width - thumbWidth) * progress, y: track.minY,
+                            width: thumbWidth, height: track.height), radius: 1.5)
+                }
             } else {
                 #if os(macOS)
                     let dark = NSAppearance.currentDrawing().bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -369,11 +1054,31 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
                 }
             }
         }
-        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+        drawNativeText(for: glyphsToShow, at: origin, background: true)
+    }
+
+    override func drawUnderline(
+        forGlyphRange glyphRange: NSRange, underlineType underlineVal: NSUnderlineStyle,
+        baselineOffset: CGFloat, lineFragmentRect lineRect: CGRect,
+        lineFragmentGlyphRange lineGlyphRange: NSRange, containerOrigin: CGPoint
+    ) {
+        var origin = containerOrigin
+        if glyphRange.length > 0, let storage = textStorage {
+            let character = characterIndexForGlyph(at: glyphRange.location)
+            if character < storage.length, storage.attribute(.link, at: character, effectiveRange: nil) != nil {
+                // Move only the decoration: glyph advances, selection and caret stay native.
+                let font = storage.attribute(.font, at: character, effectiveRange: nil) as? PlatformFont
+                origin.y += max(1.5, (font?.pointSize ?? DocumentTypography.bodySize) * 0.1)
+            }
+        }
+        super.drawUnderline(
+            forGlyphRange: glyphRange, underlineType: underlineVal, baselineOffset: baselineOffset,
+            lineFragmentRect: lineRect, lineFragmentGlyphRange: lineGlyphRange, containerOrigin: origin)
     }
 
     override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {
-        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+        drawNativeText(for: glyphsToShow, at: origin, background: false)
+        drawCodeLineNumbers(at: origin)
         guard let storage = textStorage, storage.length > 0 else { return }
         #if os(macOS)
             if let textView = textContainers.first?.textView {
@@ -403,6 +1108,16 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
                     hovered: hoveredTaskMarker == marker,
                     in: rect
                 )
+            }
+            var listAnchor = paragraph.location
+            while listAnchor < NSMaxRange(paragraph), source.character(at: listAnchor) == 9 { listAnchor += 1 }
+            if listAnchor < storage.length,
+                let marker = storage.attribute(.weaveListMarker, at: listAnchor, effectiveRange: nil) as? String,
+                let rect = taskMarkerRect(at: listAnchor)?.offsetBy(dx: origin.x, dy: origin.y),
+                let font = storage.attribute(.font, at: listAnchor, effectiveRange: nil) as? PlatformFont
+            {
+                drawListMarker(
+                    marker, depth: listAnchor - paragraph.location, in: rect, font: font)
             }
             let next = NSMaxRange(paragraph)
             if next <= location { break }
@@ -495,7 +1210,8 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
 
     func taskMarkerRect(at character: Int) -> CGRect? {
         guard let storage = textStorage, character >= 0, character < storage.length,
-            storage.attribute(.weaveParagraphStyle, at: character, effectiveRange: nil) as? String == "task"
+            ["task", "bullet", "numbered"].contains(
+                storage.attribute(.weaveParagraphStyle, at: character, effectiveRange: nil) as? String ?? "")
         else { return nil }
         let reference = character
         guard let font = storage.attribute(.font, at: reference, effectiveRange: nil) as? PlatformFont else { return nil }
@@ -516,8 +1232,11 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         in container: NSTextContainer
     ) -> CGRect {
         let fragment: CGRect
-        if let storage = textStorage, storage.length > 0, insertion < storage.length {
-            fragment = lineFragmentRect(forGlyphAt: glyphIndexForCharacter(at: insertion), effectiveRange: nil)
+        let source = (textStorage?.string ?? "") as NSString
+        let paragraph = source.paragraphRange(for: NSRange(location: min(insertion, source.length), length: 0))
+        let depth = source.substring(with: paragraph).prefix(while: { $0 == "\t" }).count
+        if source.length > 0, paragraph.location < source.length {
+            fragment = lineFragmentRect(forGlyphAt: glyphIndexForCharacter(at: min(insertion, source.length - 1)), effectiveRange: nil)
         } else {
             fragment = extraLineFragmentRect
         }
@@ -528,7 +1247,7 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
             let baseline = fragment.minY + max(0, (lineHeight - font.lineHeight) / 2) + font.ascender
         #endif
         let textX =
-            fragment.minX + DocumentTypography.listIndent
+            fragment.minX + container.lineFragmentPadding + DocumentTypography.listIndent * CGFloat(depth + 1)
             + (quoted ? DocumentTypography.quoteIndent : 0)
         return taskMarkerRect(
             textX: textX,
@@ -537,6 +1256,69 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
             ascent: CTFontGetAscent(font as CTFont),
             descent: CTFontGetDescent(font as CTFont)
         )
+    }
+
+    func drawListMarker(_ marker: String, depth: Int, in rect: CGRect, font: PlatformFont) {
+        let color = AppTheme.nativeAccent
+        if marker == "•" {
+            color.setFill()
+            let diameter = max(4, font.pointSize * 0.34)
+            let shape = CGRect(x: rect.midX - diameter / 2, y: rect.midY - diameter / 2, width: diameter, height: diameter)
+            switch depth % 3 {
+            case 1:
+                color.setStroke()
+                #if os(macOS)
+                    let ring = NSBezierPath(ovalIn: shape)
+                #else
+                    let ring = UIBezierPath(ovalIn: shape)
+                #endif
+                ring.lineWidth = max(1, font.pointSize * 0.08)
+                ring.stroke()
+            case 2: fill(shape, radius: 0)
+            default: fill(shape, radius: diameter / 2)
+            }
+        } else {
+            let numberFont = PlatformFont.monospacedDigitSystemFont(ofSize: font.pointSize, weight: .regular)
+            let attributes: [NSAttributedString.Key: Any] = [.font: numberFont, .foregroundColor: color]
+            let label = ListMarkerFormatting.label(for: marker, depth: depth) as NSString
+            let size = label.size(withAttributes: attributes)
+            label.draw(at: CGPoint(x: rect.maxX - size.width, y: rect.midY - size.height / 2), withAttributes: attributes)
+        }
+    }
+
+    func emptyListMarkerRect(
+        selection: NSRange, attributes: [NSAttributedString.Key: Any], in container: NSTextContainer
+    ) -> CGRect? {
+        guard let storage = textStorage, selection.length == 0,
+            attributes[.weaveListMarker] is String,
+            let font = attributes[.font] as? PlatformFont
+        else { return nil }
+        let source = storage.string as NSString
+        let insertion = min(selection.location, source.length)
+        let paragraph = source.paragraphRange(for: NSRange(location: insertion, length: 0))
+        let line = source.substring(with: paragraph)
+        let anchor = paragraph.location + line.prefix(while: { $0 == "\t" }).utf16.count
+        // Tabs carry list attributes but do not provide a drawable marker anchor.
+        // Only suppress the empty marker when the glyph pass can draw it itself.
+        guard line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            anchor >= storage.length || storage.attribute(.weaveListMarker, at: anchor, effectiveRange: nil) == nil
+        else { return nil }
+        return emptyTaskMarkerRect(
+            at: insertion, font: font, quoted: attributes[.weaveQuote] as? Bool == true, in: container)
+    }
+
+    func drawEmptyListMarker(selection: NSRange, attributes: [NSAttributedString.Key: Any], origin: CGPoint, in container: NSTextContainer)
+    {
+        guard let rect = emptyListMarkerRect(selection: selection, attributes: attributes, in: container),
+            let marker = attributes[.weaveListMarker] as? String,
+            let font = attributes[.font] as? PlatformFont,
+            let storage = textStorage
+        else { return }
+        let source = storage.string as NSString
+        let paragraph = source.paragraphRange(for: NSRange(location: min(selection.location, source.length), length: 0))
+        drawListMarker(
+            marker, depth: source.substring(with: paragraph).prefix(while: { $0 == "\t" }).count,
+            in: rect.offsetBy(dx: origin.x, dy: origin.y), font: font)
     }
 
     private func taskMarkerRect(
@@ -598,7 +1380,7 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
         let borderWidth = max(1, rect.height * DocumentTypography.taskBorderWidthRatio)
         #if os(macOS)
             let borderColor = NSColor.secondaryLabelColor
-            let accentColor = NSColor.controlAccentColor
+            let accentColor = AppTheme.nativeAccent
             let outline = NSBezierPath(roundedRect: outlineRect, xRadius: cornerRadius, yRadius: cornerRadius)
             (hovered ? accentColor : borderColor).setStroke()
             outline.lineWidth = borderWidth
@@ -622,7 +1404,7 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
             image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         #else
             let borderColor = UIColor.secondaryLabel
-            let accentColor = UIColor(Color.accentColor)
+            let accentColor = AppTheme.nativeAccent
             let outline = UIBezierPath(roundedRect: outlineRect, cornerRadius: cornerRadius)
             borderColor.setStroke()
             outline.lineWidth = borderWidth
@@ -708,6 +1490,17 @@ final class CodeLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
 
 /// Keeps the persisted SwiftUI attributes separate from the platform input system.
 enum NativeTextAttributes {
+    // Link decoration belongs to the view, not stored text or typing attributes.
+    // Omitting foregroundColor and font preserves the surrounding run's appearance.
+    static var linkTextAttributes: [NSAttributedString.Key: Any] {
+        #if os(macOS)
+            let color = NSColor.secondaryLabelColor
+        #else
+            let color = UIColor.secondaryLabel
+        #endif
+        return [.underlineStyle: NSUnderlineStyle.single.rawValue, .underlineColor: color]
+    }
+
     // Display scaling is reversible; stored font sizes remain independent of the reading layout.
     static let readingScale = DocumentTypography.readingScale
 
@@ -811,6 +1604,18 @@ enum NativeTextAttributes {
     }
 
     static func layoutParagraphs(_ text: NSMutableAttributedString, around affected: NSRange? = nil) {
+        var counter = ListMarkerFormatting.Counter()
+        let listSource = text.string as NSString
+        var listLocation = 0
+        while listLocation < text.length {
+            let paragraph = listSource.paragraphRange(for: NSRange(location: listLocation, length: 0))
+            let raw = text.attribute(.weaveListMarker, at: listLocation, effectiveRange: nil) as? String
+            let depth = listSource.substring(with: paragraph).prefix(while: { $0 == "\t" }).count
+            if let marker = counter.marker(raw, depth: depth), marker != raw {
+                text.addAttribute(.weaveListMarker, value: marker, range: paragraph)
+            }
+            listLocation = NSMaxRange(paragraph)
+        }
         let region = paragraphRegion(in: text, around: affected)
         layoutInlineCode(text, in: region)
         text.enumerateAttribute(.weaveQuoteColor, in: region) { value, range, _ in
@@ -858,13 +1663,13 @@ enum NativeTextAttributes {
                 paragraph.paragraphSpacingBefore = location == 0 ? 0 : heading.before
                 paragraph.paragraphSpacing = heading.after
             }
-            if content.trimmingCharacters(in: .whitespaces).hasPrefix("• ") || role == "task"
+            if content.trimmingCharacters(in: .whitespaces).hasPrefix("• ") || ["task", "bullet", "numbered"].contains(role)
                 || content.range(of: #"^\d+\. "#, options: .regularExpression) != nil
             {
                 paragraph.headIndent = DocumentTypography.listIndent
                 paragraph.paragraphSpacing = DocumentTypography.listSpacing
             }
-            if role == "task" {
+            if ["task", "bullet", "numbered"].contains(role) {
                 paragraph.firstLineHeadIndent = DocumentTypography.listIndent
             }
             if quoted {
@@ -915,7 +1720,9 @@ enum NativeTextAttributes {
                     #endif
                 }
             }
-            let level = MarkdownShortcut.listPrefix(content) == nil && role != "task" ? 0 : content.prefix(while: { $0 == "\t" }).count
+            let level =
+                MarkdownShortcut.listPrefix(content) == nil && !["task", "bullet", "numbered"].contains(role)
+                ? 0 : content.prefix(while: { $0 == "\t" }).count
             paragraph.headIndent += CGFloat(level) * DocumentTypography.listIndent
             if text.attribute(.weaveCodeStyle, at: location, effectiveRange: nil) as? String == "inline",
                 let inlineFont = text.attribute(.font, at: location, effectiveRange: nil) as? PlatformFont
@@ -925,7 +1732,13 @@ enum NativeTextAttributes {
                 paragraph.firstLineHeadIndent +=
                     inlineFont.pointSize * (DocumentTypography.inlineCodePaddingRatio + DocumentTypography.inlineCodeMarginRatio)
             }
-            paragraph.tabStops = (1...12).map { NSTextTab(textAlignment: .left, location: CGFloat($0) * DocumentTypography.listIndent) }
+            // Tabs are absolute paragraph coordinates: shift their grid with the quote
+            // so every nesting level advances a full list indent, including the first.
+            let tabOrigin = quoted ? DocumentTypography.quoteIndent : 0
+            paragraph.tabStops = (1...12).map {
+                NSTextTab(textAlignment: .left, location: tabOrigin + CGFloat($0) * DocumentTypography.listIndent)
+            }
+            paragraph.defaultTabInterval = DocumentTypography.listIndent
             // Paragraph metrics follow their semantic role, never whether the
             // line or its neighbours currently contain text. Typing the first
             // character must not introduce margins or move subsequent content.
@@ -950,6 +1763,7 @@ enum NativeTextAttributes {
             attributes[.weaveInlineEmphasis] = emphasis
             if let style = run[ParagraphStyleAttribute.self] { attributes[.weaveParagraphStyle] = style }
             if run[QuoteAttribute.self] == true { attributes[.weaveQuote] = true }
+            if let marker = run[ListMarkerAttribute.self] { attributes[.weaveListMarker] = marker }
             if let checked = run[TaskStateAttribute.self] { attributes[.weaveTaskChecked] = checked }
             if let style = run[CodeStyleAttribute.self] {
                 attributes[.weaveCodeStyle] = style
@@ -1080,6 +1894,7 @@ enum NativeTextAttributes {
             if let language = attributes[.weaveCodeLanguage] as? String { result[range][CodeLanguageAttribute.self] = language }
             if let style = attributes[.weaveParagraphStyle] as? String { result[range][ParagraphStyleAttribute.self] = style }
             if attributes[.weaveQuote] as? Bool == true { result[range][QuoteAttribute.self] = true }
+            if let marker = attributes[.weaveListMarker] as? String { result[range][ListMarkerAttribute.self] = marker }
             if let checked = attributes[.weaveTaskChecked] as? Bool { result[range][TaskStateAttribute.self] = checked }
             if let style = attributes[.weaveCodeStyle] as? String { result[range][CodeStyleAttribute.self] = style }
             if let font = attributes[.font] as? PlatformFont { result[range].font = Font(storedFont(font as CTFont)) }
@@ -1107,5 +1922,27 @@ enum NativeTextAttributes {
             #endif
         }
         return result
+    }
+}
+
+#if os(macOS)
+    /// AppKit drives progress on the main run loop; the weak reference avoids retaining an editor.
+    private final class LinkHoverAnimation: NSAnimation {
+        weak var layout: CodeLayoutManager?
+        override var currentProgress: NSAnimation.Progress {
+            didSet { layout?.updateLinkHoverAnimation(progress: CGFloat(currentValue)) }
+        }
+    }
+#endif
+
+/// Timer retains this proxy, never the editor or its layout manager.
+private final class CodeIndicatorClock: NSObject {
+    weak var layout: CodeLayoutManager?
+    @objc func tick(_ timer: Timer) {
+        guard let layout else {
+            timer.invalidate()
+            return
+        }
+        layout.updateCodeIndicators()
     }
 }

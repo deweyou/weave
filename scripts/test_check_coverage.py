@@ -34,12 +34,39 @@ class CoverageGateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             evaluate(self.report(), self.root)
 
+    def test_ios_only_workspace_is_explicitly_reported_on_mac(self):
+        (self.root / "App").mkdir()
+        (self.root / "App/MobileWorkspaceView.swift").touch()
+        passed, summary = evaluate(self.report(), self.root)
+        self.assertTrue(passed)
+        self.assertIn("Not compiled on macos: App/MobileWorkspaceView.swift", summary)
+        with self.assertRaises(ValueError):
+            evaluate(self.report(), self.root, "ios")
+
+    def test_mac_workspace_still_requires_coverage_on_mac(self):
+        (self.root / "App").mkdir()
+        (self.root / "App/MacWorkspaceView.swift").touch()
+        with self.assertRaises(ValueError):
+            evaluate(self.report(), self.root)
+
     def test_rejects_empty_report(self):
         with self.assertRaises(ValueError):
             evaluate({"data": []}, self.root)
 
     def test_ui_counts_in_overall_gate(self):
         self.entries[2]["summary"]["lines"]["count"] = 1000
+        self.assertFalse(evaluate(self.report(), self.root)[0])
+
+    def test_toast_view_and_presenter_keep_separate_coverage_contracts(self):
+        for name, count, covered in [("Toast.swift", 10, 0), ("ToastPresenter.swift", 100, 100)]:
+            path = self.root / name
+            path.touch()
+            self.entries.append({"filename": str(path), "summary": {"lines": {"count": count, "covered": covered}}})
+        self.assertTrue(evaluate(self.report(), self.root)[0])
+        self.entries[-1]["summary"]["lines"]["covered"] = 0
+        self.assertFalse(evaluate(self.report(), self.root)[0])
+        self.entries[-1]["summary"]["lines"]["covered"] = 100
+        self.entries[-2]["summary"]["lines"]["count"] = 1000
         self.assertFalse(evaluate(self.report(), self.root)[0])
 
     def test_rejects_duplicate_entries(self):

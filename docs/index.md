@@ -4,10 +4,12 @@
 
 | 问题 | 阅读入口 | 需要同时检查 |
 | --- | --- | --- |
+| 复制粘贴测试 Markdown | [无图片样本](examples/markdown-paste-sample.md) | 复制文件原始文本，粘贴到正文；步骤见[验证](verification.md#markdown-粘贴样本) |
 | 查看 Markdown 全集与实际效果 | [效果手册](examples/markdown-showcase.md) | 在 App 中导入；已支持能力与兼容性对照分开标注 |
 | 本期做什么、未来做什么 | [产品](product.md)、[本期规格](specs/first-release.md) | 用户本次范围 |
 | 代码在哪里、数据如何保存 | [架构](architecture.md) | `Sources/Weave` |
-| 正文样式与原生交互怎么设计 | [设计](../DESIGN.md) | 当前 App、两份设计 skill |
+| 双栏与跨设备布局、正文样式和原生交互怎么设计 | [设计](../DESIGN.md) | 当前 App、两份设计 skill |
+| 按钮、链接和可点击区域的 pointer 规则 | [光标设计约定](../DESIGN.md#可点击区域的光标全局约定) | [指针验收](verification.md#可点击区域的指针验收) |
 | 如何验证编辑器改动 | [验证](verification.md) | 受影响测试和目标平台 |
 | 如何规划任务、记录证据、创建 PR | [开发流程](development.md) | `harness.yaml` 与安装版 Harness skill |
 

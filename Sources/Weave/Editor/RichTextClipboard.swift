@@ -36,8 +36,10 @@ enum RichTextClipboard {
         let original = try JSONDecoder().decode(Payload.self, from: data).richText
         try validateTables(in: original)
         var pasted = original
+        ParagraphEditing.migrateLegacyAttributes(&pasted)
         var codeIDs: [String: String] = [:]
-        for run in original.runs {
+        let migrated = pasted
+        for run in migrated.runs {
             if var table = run[TableAttribute.self] {
                 table.id = UUID()
                 pasted[run.range][TableAttribute.self] = table
@@ -49,6 +51,27 @@ enum RichTextClipboard {
             }
         }
         return pasted
+    }
+
+    /// Only intercept text with supported Markdown semantics. Ordinary text keeps native
+    /// paste behavior, including its exact line breaks and the current typing attributes.
+    static func renderMarkdown(_ source: String) -> AttributedString? {
+        // Preserve the native selected-label + URL command instead of replacing its label.
+        if !source.contains(where: { $0.isWhitespace }), let url = URL(string: source),
+            ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil
+        {
+            return nil
+        }
+        let rendered = MarkdownFormatting.render(source)
+        let hasFormatting = rendered.runs.contains { run in
+            (run[ParagraphStyleAttribute.self] ?? "body") != "body"
+                || run[QuoteAttribute.self] == true
+                || run[CodeStyleAttribute.self] != nil
+                || (run[InlineEmphasisAttribute.self] ?? 0) != 0
+                || run.strikethroughStyle != nil
+                || run.link != nil
+        }
+        return hasFormatting ? rendered : nil
     }
 
     private static func validateTables(in text: AttributedString) throws {

@@ -6,6 +6,11 @@ enum ParagraphStyleAttribute: CodableAttributedStringKey {
     static let name = "weave.paragraphStyle"
 }
 
+enum ListMarkerAttribute: CodableAttributedStringKey {
+    typealias Value = String
+    static let name = "weave.listMarker"
+}
+
 enum TaskStateAttribute: CodableAttributedStringKey {
     typealias Value = Bool
     static let name = "weave.taskChecked"
@@ -47,7 +52,7 @@ enum DocumentTypography {
     static let inlineCodeMarginRatio: CGFloat = 0.3
     static let inlineCodeBackgroundRiseRatio: CGFloat = 0.08
     static let codeLineSpacing: CGFloat = 3
-    static let codeInset: CGFloat = 14
+    static let codeInset: CGFloat = 16
     static let readingWidth: CGFloat = 728
     static let titleLeadingInset: CGFloat = 5
     static let titleTopInset: CGFloat = 24
@@ -73,8 +78,8 @@ enum DocumentTypography {
     #else
         static let taskIconHitSize: CGFloat = 44
     #endif
-    static let codeBefore: CGFloat = 12
-    static let codeAfter: CGFloat = 14
+    static let codeBefore: CGFloat = 20
+    static let codeAfter: CGFloat = 20
     static let tableRowHeight: CGFloat = 44
     static let tableControlsHeight: CGFloat = 32
     #if os(macOS)
@@ -206,8 +211,7 @@ enum ParagraphEditing {
             attributes.font = DocumentTypography.font(for: style, emphasis: emphasis, context: context)
             attributes[CodeStyleAttribute.self] = style == "code" ? "block:" + UUID().uuidString : nil
             attributes[TaskStateAttribute.self] = style == "task" ? false : nil
-            let marker = style == "bullet" ? "• " : style == "numbered" ? "1. " : ""
-            if !marker.isEmpty { text += AttributedString(marker, attributes: attributes) }
+            attributes[ListMarkerAttribute.self] = style == "bullet" ? "•" : style == "numbered" ? "1." : nil
             selection = AttributedTextSelection(insertionPoint: text.endIndex, typingAttributes: attributes)
             return
         }
@@ -228,13 +232,15 @@ enum ParagraphEditing {
             paragraphs.append(paragraph)
             location = NSMaxRange(paragraph)
         }
-        for (index, paragraph) in paragraphs.enumerated().reversed() {
+        for paragraph in paragraphs.reversed() {
             let line = source.substring(with: paragraph)
-            let oldPrefix = MarkdownShortcut.listPrefix(line)?.prefix ?? ""
+            let paragraphRange = Range<AttributedString.Index>(paragraph, in: content)
+            let hasSemanticMarker = paragraphRange.flatMap { content[$0].runs.first?[ListMarkerAttribute.self] } != nil
+            let oldPrefix = hasSemanticMarker ? "" : MarkdownShortcut.listPrefix(line)?.prefix ?? ""
             let marker: String
             switch style {
-            case "bullet": marker = "• "
-            case "numbered": marker = "\(index + 1). "
+            case "bullet": marker = ""
+            case "numbered": marker = ""
             case "task": marker = ""
             default: marker = ""
             }
@@ -258,8 +264,21 @@ enum ParagraphEditing {
         if !content.characters.isEmpty {
             let whole = content.startIndex..<content.endIndex
             content[whole][TaskStateAttribute.self] = style == "task" ? false : nil
+            content[whole][ListMarkerAttribute.self] = nil
+            let plain = String(content.characters) as NSString
+            var offset = 0
+            var number = 1
+            while offset < plain.length {
+                let paragraph = plain.paragraphRange(for: NSRange(location: offset, length: 0))
+                if let range = Range<AttributedString.Index>(paragraph, in: content) {
+                    content[range][ListMarkerAttribute.self] = style == "bullet" ? "•" : style == "numbered" ? "\(number)." : nil
+                }
+                offset = NSMaxRange(paragraph)
+                number += 1
+            }
         }
         text.replaceSubrange(range, with: content)
+        ListMarkerFormatting.normalizeNestedNumbers(in: &text)
         func mappedOffset(_ offset: Int) -> Int {
             var delta = 0
             for edit in prefixEdits.sorted(by: { $0.location < $1.location }) {
@@ -274,6 +293,7 @@ enum ParagraphEditing {
         }
         let start = mappedOffset(originalSelection.location)
         let end = mappedOffset(NSMaxRange(originalSelection))
+        ListMarkerFormatting.normalizeNestedNumbers(in: &text)
         if let restored = Range<AttributedString.Index>(NSRange(location: start, length: max(0, end - start)), in: text) {
             selection =
                 selectionWasInsertionPoint || restored.isEmpty
@@ -303,7 +323,8 @@ enum ParagraphEditing {
             let depth = line.prefix(while: { $0 == "\t" }).count
             let paragraphRole = Range<AttributedString.Index>(paragraph, in: text)
                 .flatMap { text[$0].runs.first?[ParagraphStyleAttribute.self] }
-            if MarkdownShortcut.listPrefix(line)?.style != .quote && MarkdownShortcut.listPrefix(line) != nil || paragraphRole == "task",
+            if MarkdownShortcut.listPrefix(line)?.style != .quote && MarkdownShortcut.listPrefix(line) != nil
+                || ["task", "bullet", "numbered"].contains(paragraphRole ?? ""),
                 outdent ? depth > 0 : depth < 8
             {
                 edits.append(NSRange(location: location, length: outdent ? 1 : 0))
@@ -318,6 +339,7 @@ enum ParagraphEditing {
             if edit.location <= start { start = max(edit.location, start + delta) }
             if edit.location <= end { end = max(edit.location, end + delta) }
         }
+        ListMarkerFormatting.normalizeNestedNumbers(in: &text)
         if let restored = Range<AttributedString.Index>(NSRange(location: start, length: max(0, end - start)), in: text) {
             selection =
                 restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
@@ -340,6 +362,23 @@ enum ParagraphEditing {
                 location = NSMaxRange(paragraph)
             }
             return result
+        }
+        // Old list markers were selectable text. Migrate only explicitly styled lists,
+        // and only once; a new list item may legitimately begin with "1. ".
+        for paragraph in paragraphRanges().reversed() {
+            guard let range = Range<AttributedString.Index>(paragraph, in: text),
+                let first = text[range].runs.first,
+                ["bullet", "numbered"].contains(first[ParagraphStyleAttribute.self] ?? ""),
+                first[ListMarkerAttribute.self] == nil
+            else { continue }
+            let line = String(text[range].characters)
+            guard let prefix = MarkdownShortcut.listPrefix(line) else { continue }
+            let indent = line.prefix(while: { $0 == "\t" }).count
+            let marker = String(prefix.prefix.dropFirst(indent)).trimmingCharacters(in: .whitespaces)
+            text[range][ListMarkerAttribute.self] = marker
+            let start = text.characters.index(range.lowerBound, offsetBy: indent)
+            let end = text.characters.index(start, offsetBy: prefix.prefix.count - indent)
+            text.removeSubrange(start..<end)
         }
         for paragraph in paragraphRanges().reversed() {
             guard let range = Range<AttributedString.Index>(paragraph, in: text),
@@ -418,6 +457,80 @@ enum ParagraphEditing {
         if let restored = Range<AttributedString.Index>(selected, in: text) {
             selection =
                 restored.isEmpty ? AttributedTextSelection(insertionPoint: restored.lowerBound) : AttributedTextSelection(range: restored)
+        }
+    }
+}
+
+/// Marker presentation is independent of the numeric Markdown representation.
+enum ListMarkerFormatting {
+    struct Counter {
+        private var values: [Int: Int] = [:]
+
+        mutating func marker(_ marker: String?, depth: Int) -> String? {
+            guard let marker else {
+                values.removeAll()
+                return nil
+            }
+            values = values.filter { $0.key <= depth }
+            guard marker != "•" else {
+                values.removeValue(forKey: depth)
+                return marker
+            }
+            if depth == 0 { return marker }
+            let number = (values[depth] ?? 0) + 1
+            values[depth] = number
+            return "\(number)."
+        }
+    }
+
+    static func normalizeNestedNumbers(in text: inout AttributedString) {
+        let source = String(text.characters) as NSString
+        var location = 0
+        var counter = Counter()
+        while location < source.length {
+            let paragraph = source.paragraphRange(for: NSRange(location: location, length: 0))
+            if let range = Range<AttributedString.Index>(paragraph, in: text) {
+                let raw = text[range].runs.first?[ListMarkerAttribute.self]
+                let depth = source.substring(with: paragraph).prefix(while: { $0 == "\t" }).count
+                let marker = counter.marker(raw, depth: depth)
+                if marker != raw { text[range][ListMarkerAttribute.self] = marker }
+            }
+            location = NSMaxRange(paragraph)
+        }
+    }
+
+    static func label(for marker: String, depth: Int) -> String {
+        let level = max(0, depth) % 3
+        if marker == "•" { return ["•", "○", "▪"][level] }
+        let number = max(1, Int(marker.dropLast()) ?? 1)
+        switch level {
+        case 1:
+            var value = number
+            var letters = ""
+            while value > 0 {
+                value -= 1
+                // The remainder always indexes one of the 26 ASCII lowercase letters.
+                let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
+                letters = String(alphabet[value % 26]) + letters
+                value /= 26
+            }
+            return letters + "."
+        case 2:
+            // Bound Roman output for unusually large imported values.
+            guard number < 4000 else { return "\(number)." }
+            var value = number
+            var roman = ""
+            for (amount, symbol) in [
+                (1000, "m"), (900, "cm"), (500, "d"), (400, "cd"), (100, "c"), (90, "xc"), (50, "l"), (40, "xl"), (10, "x"), (9, "ix"),
+                (5, "v"), (4, "iv"), (1, "i"),
+            ] {
+                while value >= amount {
+                    roman += symbol
+                    value -= amount
+                }
+            }
+            return roman + "."
+        default: return "\(number)."
         }
     }
 }

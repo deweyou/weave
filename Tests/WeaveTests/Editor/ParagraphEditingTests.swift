@@ -67,6 +67,47 @@ struct ParagraphEditingTests {
         #expect(MarkdownFormatting.serialize(text, context: EnvironmentValues().fontResolutionContext) == "- [ ] Open\n- [x] Done")
     }
 
+    @Test func legacyListsMigrateOnceAndPersistWithoutSelectableMarkers() throws {
+        var old = AttributedString("• 中文🌿\n")
+        old[ParagraphStyleAttribute.self] = "bullet"
+        var numbered = AttributedString("12. 1. 字面内容")
+        numbered[ParagraphStyleAttribute.self] = "numbered"
+        old += numbered
+        var note = Note(id: UUID(), text: "", createdAt: Date(), updatedAt: Date())
+        note.richText = old
+        let decoded = try JSONDecoder().decode(Note.self, from: JSONEncoder().encode(note))
+        #expect(decoded.text == "中文🌿\n1. 字面内容")
+        #expect(decoded.richText[decoded.richText.range(of: "中文🌿")!][ListMarkerAttribute.self] == "•")
+        #expect(decoded.richText[decoded.richText.range(of: "1. 字面内容")!][ListMarkerAttribute.self] == "12.")
+        let restarted = try JSONDecoder().decode(Note.self, from: JSONEncoder().encode(decoded))
+        #expect(restarted.richText == decoded.richText)
+        var changed = decoded.richText
+        var selection = AttributedTextSelection(range: changed.startIndex..<changed.endIndex)
+        ParagraphEditing.apply("body", to: &changed, selection: &selection)
+        #expect(String(changed.characters) == decoded.text)
+        #expect(changed.runs.allSatisfy { $0[ListMarkerAttribute.self] == nil })
+    }
+
+    @Test func listMarkerLevelsCycleAndFormatLongSequences() {
+        #expect((0..<6).map { ListMarkerFormatting.label(for: "•", depth: $0) } == ["•", "○", "▪", "•", "○", "▪"])
+        #expect((0..<6).map { ListMarkerFormatting.label(for: "2.", depth: $0) } == ["2.", "b.", "ii.", "2.", "b.", "ii."])
+        #expect(ListMarkerFormatting.label(for: "27.", depth: 1) == "aa.")
+        #expect(ListMarkerFormatting.label(for: "49.", depth: 2) == "xlix.")
+        #expect(ListMarkerFormatting.label(for: "4000.", depth: 2) == "4000.")
+    }
+
+    @Test func childListsRestartPerParentAndSurviveMarkdownRoundTrip() throws {
+        let source = "1. Parent A\n    1. Child A\n        1. Detail A\n        1. Detail B\n    1. Child B\n2. Parent B\n    8. Child C"
+        let text = MarkdownFormatting.render(source)
+        for (label, marker) in [("Child A", "1."), ("Detail A", "1."), ("Detail B", "2."), ("Child B", "2."), ("Child C", "1.")] {
+            let range = try #require(text.range(of: label))
+            #expect(text[range][ListMarkerAttribute.self] == marker)
+        }
+        let restored = MarkdownFormatting.render(MarkdownFormatting.serialize(text, context: EnvironmentValues().fontResolutionContext))
+        #expect(String(restored.characters) == String(text.characters))
+        #expect(restored.runs.compactMap { $0[ListMarkerAttribute.self] } == text.runs.compactMap { $0[ListMarkerAttribute.self] })
+    }
+
     @Test func legacyQuoteMarkerMigratesToComposableQuoteState() {
         var text = AttributedString("│ 引用")
         text[ParagraphStyleAttribute.self] = "quote"
@@ -79,11 +120,12 @@ struct ParagraphEditingTests {
     }
 
     @Test func emptyParagraphListCommandsPreserveSemanticTypingState() {
-        for (style, marker) in [("bullet", "• "), ("numbered", "1. "), ("task", "")] {
+        for (style, marker) in [("bullet", "•"), ("numbered", "1."), ("task", "")] {
             var text = AttributedString("Title\n")
             var selection = AttributedTextSelection(insertionPoint: text.endIndex)
             ParagraphEditing.apply(style, to: &text, selection: &selection)
-            #expect(String(text.characters) == "Title\n" + marker)
+            #expect(String(text.characters) == "Title\n")
+            #expect(selection.typingAttributes(in: text)[ListMarkerAttribute.self] == (marker.isEmpty ? nil : marker))
             if case .insertionPoint(let caret) = selection.indices(in: text) {
                 #expect(caret == text.endIndex)
             } else {
@@ -98,7 +140,7 @@ struct ParagraphEditingTests {
         let original = text
         var selection = AttributedTextSelection(range: text.startIndex..<text.endIndex)
         ParagraphEditing.indentList(in: &text, selection: &selection, outdent: false)
-        #expect(String(text.characters) == "\t• First 🌊\n\tSecond\nPlain")
+        #expect(String(text.characters) == "\tFirst 🌊\n\tSecond\nPlain")
         #expect(text[text.range(of: "First")!].font == .body.bold())
         ParagraphEditing.indentList(in: &text, selection: &selection, outdent: true)
         #expect(text == original)
@@ -134,7 +176,9 @@ struct ParagraphEditingTests {
         var text = AttributedString("甲\n乙")
         var selection = AttributedTextSelection(range: text.startIndex..<text.endIndex)
         ParagraphEditing.apply("numbered", to: &text, selection: &selection)
-        #expect(String(text.characters) == "1. 甲\n2. 乙")
+        #expect(String(text.characters) == "甲\n乙")
+        #expect(text[text.range(of: "甲")!][ListMarkerAttribute.self] == "1.")
+        #expect(text[text.range(of: "乙")!][ListMarkerAttribute.self] == "2.")
         ParagraphEditing.apply("task", to: &text, selection: &selection)
         #expect(String(text.characters) == "甲\n乙")
         #expect(text[text.range(of: "甲")!][TaskStateAttribute.self] == false)

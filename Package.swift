@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26), .iOS(.v26)],
     products: [.executable(name: "Weave", targets: ["Weave"])],
     targets: [
-        .executableTarget(name: "Weave"),
+        .executableTarget(name: "Weave", resources: [.copy("Resources/CodeFormatting")]),
         .testTarget(name: "WeaveTests", dependencies: ["Weave"]),
     ]
 )

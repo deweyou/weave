@@ -13,6 +13,7 @@ struct NativeRichTextEditor {
     var focusWhenEmpty = true
     var focusRequest = 0
     var onEditLink: () -> Void = {}
+    var onToast: (ToastMessage) -> Void = { _ in }
     @Environment(\.fontResolutionContext) private var fontContext
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -54,7 +55,32 @@ struct NativeRichTextEditor {
             #endif
         }
 
-        private func setSelection(_ range: NSRange) {
+        /// Tab indentation belongs to the list layout, never an insertion position.
+        func clampedListCaret(_ range: NSRange) -> NSRange {
+            guard range.length == 0, let storage, range.location <= storage.length, !hasMarkedText else { return range }
+            let source = storage.string as NSString
+            let paragraph = source.paragraphRange(for: range)
+            guard paragraph.location < storage.length,
+                ["bullet", "numbered", "task"].contains(
+                    storage.attribute(.weaveParagraphStyle, at: paragraph.location, effectiveRange: nil) as? String ?? "")
+            else { return range }
+            let depth = source.substring(with: paragraph).prefix(while: { $0 == "\t" }).utf16.count
+            return NSRange(location: max(range.location, paragraph.location + depth), length: 0)
+        }
+
+        func moveLeftFromListStart() -> Bool {
+            guard !hasMarkedText, let storage, currentSelection.length == 0 else { return false }
+            let source = storage.string as NSString
+            let paragraph = source.paragraphRange(for: currentSelection)
+            let start = clampedListCaret(NSRange(location: paragraph.location, length: 0))
+            guard start.location > paragraph.location, currentSelection == start else { return false }
+            setSelection(NSRange(location: max(0, paragraph.location - 1), length: 0))
+            publishSelection()
+            return true
+        }
+
+        private func setSelection(_ proposed: NSRange) {
+            let range = clampedListCaret(proposed)
             #if os(macOS)
                 textView?.setSelectedRange(range)
             #else
@@ -79,6 +105,9 @@ struct NativeRichTextEditor {
                 refreshTables()
             }
             if parent.text != lastValue {
+                #if os(macOS)
+                    (textView.layoutManager as? CodeLayoutManager)?.clearLinkHover()
+                #endif
                 storage?.setAttributedString(NativeTextAttributes.native(parent.text, context: parent.fontContext))
                 lastValue = parent.text
             }
@@ -89,6 +118,7 @@ struct NativeRichTextEditor {
                 guard let first = ranges.ranges.first else { return }
                 range = NSRange(first, in: parent.text)
             }
+            range = clampedListCaret(range)
             if NSMaxRange(range) <= (storage?.length ?? 0), range != currentSelection { setSelection(range) }
             let attributes = parent.selection.typingAttributes(in: parent.text)
             let source = (storage?.string ?? "") as NSString
@@ -141,6 +171,17 @@ struct NativeRichTextEditor {
             if !hasMarkedText {
                 isUpdating = true
                 NativeTextAttributes.layoutParagraphs(storage, around: affected)
+                // Indenting an empty numbered item normalizes its stored number.
+                // Keep the synthetic marker's typing state on that same number.
+                if currentSelection.length == 0 {
+                    let paragraph = (storage.string as NSString).paragraphRange(for: currentSelection)
+                    if paragraph.location < storage.length,
+                        let marker = storage.attribute(.weaveListMarker, at: paragraph.location, effectiveRange: nil) as? String
+                    {
+                        textView?.typingAttributes[.weaveListMarker] = marker
+                        locallyAppliedTypingAttributes?[.weaveListMarker] = marker
+                    }
+                }
                 NativeTextAttributes.highlightCode(storage, around: affected)
                 isUpdating = false
             }
@@ -154,6 +195,19 @@ struct NativeRichTextEditor {
 
         fileprivate func publishSelection(in value: AttributedString? = nil) {
             guard !isUpdating, !hasMarkedText, let textView else { return }
+            let corrected = clampedListCaret(currentSelection)
+            if corrected != currentSelection {
+                isUpdating = true
+                setSelection(corrected)
+                isUpdating = false
+            }
+            if currentSelection.length == 0, let layout = textView.layoutManager as? CodeLayoutManager {
+                #if os(macOS)
+                    if let container = textView.textContainer { layout.revealCodeCaret(at: currentSelection.location, in: container) }
+                #else
+                    layout.revealCodeCaret(at: currentSelection.location, in: textView.textContainer)
+                #endif
+            }
             let text = value ?? parent.text
             guard let range = Range<AttributedString.Index>(currentSelection, in: text) else { return }
             if range.isEmpty {
@@ -171,7 +225,11 @@ struct NativeRichTextEditor {
                 in: textView,
                 onLanguage: { [weak self] id, language in
                     self?.changeCodeLanguage(id: id, language: language)
-                })
+                },
+                onFormat: { [weak self] id in
+                    try await self?.formatCode(id: id)
+                },
+                onToast: { [weak self] message in self?.parent.onToast(message) })
             tables.refresh(
                 in: textView,
                 onChange: { [weak self] id, table in
@@ -204,6 +262,57 @@ struct NativeRichTextEditor {
             apply(text: next, selection: currentSelection, attributes: attributes)
         }
 
+        private func codeRange(id: String, in storage: NSTextStorage) -> NSRange? {
+            var target: NSRange?
+            storage.enumerateAttribute(.weaveCodeStyle, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
+                if value as? String == id {
+                    target = range
+                    stop.pointee = true
+                }
+            }
+            return target
+        }
+
+        func formatCode(id: String) async throws {
+            guard !hasMarkedText, let storage, let target = codeRange(id: id, in: storage) else {
+                throw CodeFormatting.Failure.changed
+            }
+            let snapshot = storage.attributedSubstring(from: target)
+            let language = storage.attribute(.weaveCodeLanguage, at: target.location, effectiveRange: nil) as? String ?? ""
+            let formatted = try await CodeFormatting.shared.format(snapshot.string, language: language)
+            try Task.checkCancellation()
+            guard self.storage === storage else { throw CodeFormatting.Failure.changed }
+            try applyFormattedCode(formatted, id: id, snapshot: snapshot)
+        }
+
+        func applyFormattedCode(_ formatted: String, id: String, snapshot: NSAttributedString) throws {
+            guard !hasMarkedText, let view = textView, let current = storage,
+                let target = codeRange(id: id, in: current),
+                current.attributedSubstring(from: target).isEqual(to: snapshot)
+            else { throw CodeFormatting.Failure.changed }
+            guard formatted != snapshot.string, !formatted.isEmpty else { return }
+
+            let before = currentSelection
+            let attributes = view.typingAttributes
+            registerUndo(text: NSAttributedString(attributedString: current), selection: before, attributes: attributes)
+            let next = NSMutableAttributedString(attributedString: current)
+            let blockAttributes = current.attributes(at: target.location, effectiveRange: nil)
+            next.replaceCharacters(in: target, with: NSAttributedString(string: formatted, attributes: blockAttributes))
+            let length = (formatted as NSString).length
+            func shifted(_ offset: Int) -> Int {
+                if offset <= target.location { return offset }
+                if offset >= NSMaxRange(target) { return offset + length - target.length }
+                let relative = min(offset - target.location, length)
+                guard relative < length else { return target.location + length }
+                // Never leave the caret halfway through an emoji or composed character.
+                return target.location + (formatted as NSString).rangeOfComposedCharacterSequence(at: relative).location
+            }
+            let start = shifted(before.location)
+            let end = shifted(NSMaxRange(before))
+            apply(text: next, selection: NSRange(location: start, length: max(0, end - start)), attributes: attributes)
+            view.undoManager?.setActionName("格式化代码")
+        }
+
         private func exitTable(at index: Int) {
             guard let view = textView, let storage else { return }
             let offset = min(index, storage.length)
@@ -231,11 +340,27 @@ struct NativeRichTextEditor {
             publishSelection()
         }
 
+        func backspaceAtParagraphStart() -> Bool {
+            guard !hasMarkedText, let storage, let view = textView, currentSelection.length == 0 else { return false }
+            let paragraph = (storage.string as NSString).paragraphRange(for: currentSelection)
+            let line = (storage.string as NSString).substring(with: paragraph)
+            let role =
+                paragraph.location < storage.length
+                ? storage.attribute(.weaveParagraphStyle, at: paragraph.location, effectiveRange: nil) as? String
+                : view.typingAttributes[.weaveParagraphStyle] as? String
+            guard ["bullet", "numbered", "task"].contains(role ?? "") || role?.hasPrefix("heading:") == true,
+                currentSelection.location == paragraph.location + line.prefix(while: { $0 == "\t" }).utf16.count
+            else {
+                return false
+            }
+            return !intercept(range: currentSelection, replacement: "")
+        }
+
         func copyStructured(cut: Bool) -> Bool {
             guard !hasMarkedText, let storage, let view = textView, currentSelection.length > 0 else { return false }
             let range = currentSelection
             let selected = NativeTextAttributes.rich(storage.attributedSubstring(from: range))
-            let hasTable = selected.runs.contains { $0[TableAttribute.self] != nil }
+            let hasTable = selected.runs.contains { $0[TableAttribute.self] != nil || $0[ListMarkerAttribute.self] != nil }
             guard let encoded = try? RichTextClipboard.encode(selected) else {
                 #if os(macOS)
                     NSSound.beep()
@@ -273,15 +398,32 @@ struct NativeRichTextEditor {
         }
 
         func pasteStructured() -> Bool {
+            #if os(macOS)
+                let pasteboard = NSPasteboard.general
+                let encoded = pasteboard.data(forType: NSPasteboard.PasteboardType("app.weave.richtext"))
+                let plainText = pasteboard.string(forType: .string)
+                let hasRichText = pasteboard.availableType(from: [.rtf, .rtfd, .html]) != nil
+            #else
+                let pasteboard = UIPasteboard.general
+                let encoded = pasteboard.data(forPasteboardType: "app.weave.richtext")
+                let plainText = pasteboard.string
+                let hasRichText = pasteboard.contains(pasteboardTypes: ["public.rtf", "com.apple.flat-rtfd", "public.html"])
+            #endif
+            return pasteContent(encoded: encoded, plainText: plainText, hasRichText: hasRichText)
+        }
+
+        func pasteContent(encoded: Data?, plainText: String?, hasRichText: Bool) -> Bool {
             guard !hasMarkedText, let storage, let view = textView,
                 view.typingAttributes[.weaveCodeStyle] == nil
             else { return false }
-            #if os(macOS)
-                let encoded = NSPasteboard.general.data(forType: NSPasteboard.PasteboardType("app.weave.richtext"))
-            #else
-                let encoded = UIPasteboard.general.data(forPasteboardType: "app.weave.richtext")
-            #endif
-            guard let encoded, let text = try? RichTextClipboard.decode(encoded) else { return false }
+            let text: AttributedString
+            if let encoded, let decoded = try? RichTextClipboard.decode(encoded) {
+                text = decoded
+            } else if !hasRichText, let plainText, let markdown = RichTextClipboard.renderMarkdown(plainText) {
+                text = markdown
+            } else {
+                return false
+            }
             let inserted = NativeTextAttributes.native(text, context: parent.fontContext)
             let range = currentSelection
             registerUndo(text: NSAttributedString(attributedString: storage), selection: range, attributes: view.typingAttributes)
@@ -429,10 +571,10 @@ struct NativeRichTextEditor {
             let next = NSMutableAttributedString(attributedString: storage)
             next.replaceCharacters(
                 in: context.range,
-                with: NSAttributedString(string: "    ", attributes: textView.typingAttributes))
+                with: NSAttributedString(string: CodeBlockEditing.indentation, attributes: textView.typingAttributes))
             apply(
                 text: next,
-                selection: NSRange(location: context.range.location + 4, length: 0),
+                selection: NSRange(location: context.range.location + CodeBlockEditing.indentationWidth, length: 0),
                 attributes: textView.typingAttributes)
         }
 
@@ -538,8 +680,28 @@ struct NativeRichTextEditor {
                 attributes.removeValue(forKey: .weaveSyntaxColor)
                 attributes[.weaveInlineEmphasis] = 0
                 attributes.removeValue(forKey: .link)
-                if edit.style == .task { attributes[.weaveTaskChecked] = false } else { attributes.removeValue(forKey: .weaveTaskChecked) }
+                if edit.style == .task {
+                    let preservesTask = context.role == "task" && origin == .feature && context.replacement != "\n"
+                    let checked =
+                        context.paragraph.location < storage.length
+                        ? storage.attribute(.weaveTaskChecked, at: context.paragraph.location, effectiveRange: nil) as? Bool
+                        : originalAttributes[.weaveTaskChecked] as? Bool
+                    attributes[.weaveTaskChecked] = preservesTask ? (checked ?? false) : false
+                } else {
+                    attributes.removeValue(forKey: .weaveTaskChecked)
+                }
             default: break
+            }
+            switch edit.style {
+            case .bullet: attributes[.weaveListMarker] = "•"
+            case .numbered: attributes[.weaveListMarker] = edit.listMarker ?? context.listMarker ?? "1."
+            case .bold, .italic, .code, .strike: break
+            default: attributes.removeValue(forKey: .weaveListMarker)
+            }
+            if attributes[.weaveListMarker] != nil || edit.style == .task {
+                let sample = NSMutableAttributedString(string: "\n", attributes: attributes)
+                NativeTextAttributes.layoutParagraphs(sample)
+                attributes[.paragraphStyle] = sample.attribute(.paragraphStyle, at: 0, effectiveRange: nil)
             }
             let inserted: NSAttributedString
             switch edit.style {
@@ -584,12 +746,22 @@ struct NativeRichTextEditor {
             }
             let updated = NSMutableAttributedString(attributedString: storage)
             updated.replaceCharacters(in: edit.range, with: inserted)
+            if edit.style == .codeBlock, inserted.length == 0 {
+                // An actual empty paragraph stores the block role immediately, so
+                // its surface/header, language selection and undo survive before typing.
+                let boundary = edit.range.location
+                if boundary < updated.length, (updated.string as NSString).character(at: boundary) == 10 {
+                    updated.setAttributes(attributes, range: NSRange(location: boundary, length: 1))
+                } else {
+                    updated.insert(NSAttributedString(string: "\n", attributes: attributes), at: boundary)
+                }
+            }
             // Persist the empty paragraph's boundary, otherwise the native view can
             // inherit code/quote attributes from a neighboring newline. When content
             // follows an empty quote marker, its terminating newline is at the edit
             // location after the marker is removed; at the end of the document the
             // preceding newline carries the empty paragraph's typing state instead.
-            if edit.style == .body, context.replacement == "\n", inserted.length == 0 {
+            if [.body, .quote].contains(edit.style), context.replacement == "\n", inserted.length == 0 {
                 let boundary: Int?
                 if edit.range.location < updated.length,
                     (updated.string as NSString).substring(with: NSRange(location: edit.range.location, length: 1)) == "\n"
@@ -612,11 +784,30 @@ struct NativeRichTextEditor {
             } else {
                 after = NSRange(location: edit.range.location + inserted.length, length: 0)
             }
+            // An empty replacement has no run to carry the list role. Style its
+            // existing paragraph boundary now, so TextKit places the caret after
+            // the marker before the user types the first content character.
+            if [.bullet, .numbered, .task].contains(edit.style), after.location < updated.length {
+                let paragraph = (updated.string as NSString).paragraphRange(for: NSRange(location: after.location, length: 0))
+                if let marker = attributes[.weaveListMarker] {
+                    updated.addAttribute(.weaveListMarker, value: marker, range: paragraph)
+                } else {
+                    updated.removeAttribute(.weaveListMarker, range: paragraph)
+                }
+                if let checked = attributes[.weaveTaskChecked] {
+                    updated.addAttribute(.weaveTaskChecked, value: checked, range: paragraph)
+                } else {
+                    updated.removeAttribute(.weaveTaskChecked, range: paragraph)
+                }
+                updated.addAttribute(.weaveParagraphStyle, value: attributes[.weaveParagraphStyle] ?? "bullet", range: paragraph)
+                NativeTextAttributes.layoutParagraphs(updated, around: paragraph)
+            }
             if edit.style == .body, origin == .feature, context.replacement != "\n", updated.length > after.location {
                 let affected = (updated.string as NSString).paragraphRange(for: NSRange(location: after.location, length: 0))
                 updated.removeAttribute(.weaveCodeStyle, range: affected)
                 updated.removeAttribute(.weaveCodeLanguage, range: affected)
                 updated.removeAttribute(.weaveTaskChecked, range: affected)
+                updated.removeAttribute(.weaveListMarker, range: affected)
                 updated.addAttribute(.weaveParagraphStyle, value: "body", range: affected)
                 if let bodyFont = attributes[.font] {
                     updated.addAttribute(.font, value: bodyFont, range: affected)
@@ -948,6 +1139,10 @@ struct NativeRichTextEditor {
         override func draw(_ dirtyRect: NSRect) {
             super.draw(dirtyRect)
             quoteDecorationView?.needsDisplay = true
+            if let layout = layoutManager as? CodeLayoutManager, let container = textContainer {
+                layout.drawEmptyListMarker(
+                    selection: selectedRange(), attributes: typingAttributes, origin: textContainerOrigin, in: container)
+            }
             guard let layout = layoutManager as? CodeLayoutManager,
                 let rect = emptyTaskMarkerDrawingRect()
             else { return }
@@ -1002,6 +1197,13 @@ struct NativeRichTextEditor {
             }
             return actions.isEmpty ? nil : actions
         }
+        override var textContainerOrigin: NSPoint {
+            // AppKit compensates for negative horizontal code fragments and for
+            // the reserved header above a tall document's first glyph. Both
+            // offsets belong to the code viewport, not the document origin.
+            NSPoint(x: textContainerInset.width, y: textContainerInset.height)
+        }
+
         override func layout() {
             super.layout()
             quoteDecorationView?.frame = bounds
@@ -1051,22 +1253,110 @@ struct NativeRichTextEditor {
         override func mouseEntered(with event: NSEvent) {
             super.mouseEntered(with: event)
             updateHoveredTask(with: event)
+            updateHoveredLink(at: convert(event.locationInWindow, from: nil))
+            cursorUpdate(with: event)
         }
         override func mouseMoved(with event: NSEvent) {
             super.mouseMoved(with: event)
             updateHoveredTask(with: event)
+            updateHoveredLink(at: convert(event.locationInWindow, from: nil))
+            cursorUpdate(with: event)
         }
+        private func prepareCodeMovement(down: Bool) {
+            guard !hasMarkedText(), let layout = layoutManager as? CodeLayoutManager, let container = textContainer else { return }
+            let selection = selectedRange()
+            layout.prepareCodeVerticalMovement(from: down ? NSMaxRange(selection) : selection.location, down: down, in: container)
+        }
+
+        override func moveUp(_ sender: Any?) {
+            prepareCodeMovement(down: false)
+            super.moveUp(sender)
+        }
+        override func moveDown(_ sender: Any?) {
+            prepareCodeMovement(down: true)
+            super.moveDown(sender)
+        }
+        override func moveUpAndModifySelection(_ sender: Any?) {
+            prepareCodeMovement(down: false)
+            super.moveUpAndModifySelection(sender)
+        }
+        override func moveDownAndModifySelection(_ sender: Any?) {
+            prepareCodeMovement(down: true)
+            super.moveDownAndModifySelection(sender)
+        }
+
+        func scrollCode(with event: NSEvent) -> Bool {
+            let horizontal =
+                event.modifierFlags.contains(.shift) && event.scrollingDeltaX == 0 ? event.scrollingDeltaY : event.scrollingDeltaX
+            let verticalDelta = event.modifierFlags.contains(.shift) ? 0 : event.scrollingDeltaY
+            let vertical = abs(verticalDelta) >= abs(horizontal)
+            if let layout = layoutManager as? CodeLayoutManager, let container = textContainer {
+                let point = convert(event.locationInWindow, from: nil)
+                let local = CGPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+                if let id = layout.scrollableCode(at: local, in: container, vertical: vertical) {
+                    if vertical {
+                        layout.scrollCodeVertically(id: id, delta: -verticalDelta, in: container, showIndicator: true)
+                    } else {
+                        layout.scrollCode(id: id, delta: -horizontal, in: container, showIndicator: true)
+                    }
+                    needsDisplay = true
+                    refreshTables?()
+                    return true
+                }
+            }
+            return false
+        }
+
+        override func scrollWheel(with event: NSEvent) {
+            if scrollCode(with: event) { return }
+            super.scrollWheel(with: event)
+        }
+
         override func cursorUpdate(with event: NSEvent) {
-            if taskMarker(at: event) != nil || isEmptyTaskMarker(at: event) {
+            // This text view also receives tracking events below SwiftUI overlays.
+            // Let the foreground control win instead of overwriting its hand cursor.
+            if PointingHandRegionView.contains(event.locationInWindow, in: window) {
+                NSCursor.pointingHand.set()
+                return
+            }
+            let point = convert(event.locationInWindow, from: nil)
+            if let header = subviews.compactMap({ $0 as? CodeHeaderHostingView }).first(where: { $0.frame.contains(point) }) {
+                header.cursor(at: header.convert(point, from: self)).set()
+            } else if taskMarker(at: event) != nil || isEmptyTaskMarker(at: event) || linkRange(at: point) != nil {
                 NSCursor.pointingHand.set()
             } else {
-                super.cursorUpdate(with: event)
+                NSCursor.iBeam.set()
             }
         }
         override func mouseExited(with event: NSEvent) {
+            (layoutManager as? CodeLayoutManager)?.hoveredLinkRange = nil
             (layoutManager as? CodeLayoutManager)?.hoveredTaskMarker = nil
             isHoveringEmptyTask = false
             super.mouseExited(with: event)
+        }
+        override func didChangeText() {
+            (layoutManager as? CodeLayoutManager)?.clearLinkHover()
+            super.didChangeText()
+        }
+
+        func updateHoveredLink(at point: CGPoint) {
+            (layoutManager as? CodeLayoutManager)?.hoveredLinkRange = linkRange(at: point)
+        }
+
+        private func linkRange(at point: CGPoint) -> NSRange? {
+            guard let layout = layoutManager as? CodeLayoutManager, let textContainer, let storage = textStorage else { return nil }
+            let local = CGPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+            layout.ensureLayout(for: textContainer)
+            let glyph = layout.glyphIndex(for: local, in: textContainer)
+            guard glyph < layout.numberOfGlyphs,
+                layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textContainer).contains(local)
+            else { return nil }
+            let index = layout.characterIndexForGlyph(at: glyph)
+            var range = NSRange()
+            guard index < storage.length,
+                storage.attribute(.link, at: index, longestEffectiveRange: &range, in: NSRange(location: 0, length: storage.length)) != nil
+            else { return nil }
+            return range
         }
         private func updateHoveredTask(with event: NSEvent) {
             guard let layout = layoutManager as? CodeLayoutManager else { return }
@@ -1150,7 +1440,21 @@ struct NativeRichTextEditor {
         }
     }
 
+    /// Native caret autoscroll and trackpad elasticity must never move the whole document sideways.
+    final class ReadingClipView: NSClipView {
+        override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+            var bounds = super.constrainBoundsRect(proposedBounds)
+            bounds.origin.x = 0
+            return bounds
+        }
+    }
+
     private final class ReadingScrollView: NSScrollView {
+        override func scrollWheel(with event: NSEvent) {
+            if (documentView as? ReadingMacTextView)?.scrollCode(with: event) == true { return }
+            super.scrollWheel(with: event)
+        }
+
         override func tile() {
             super.tile()
             guard let view = documentView as? NSTextView else { return }
@@ -1164,6 +1468,9 @@ struct NativeRichTextEditor {
     extension NativeRichTextEditor: NSViewRepresentable {
         func makeNSView(context: Context) -> NSScrollView {
             let scroll = ReadingScrollView()
+            scroll.contentView = ReadingClipView()
+            scroll.horizontalScrollElasticity = .none
+            scroll.hasHorizontalScroller = false
             scroll.hasVerticalScroller = true
             scroll.autohidesScrollers = true
             let view = ReadingMacTextView(frame: scroll.contentView.bounds)
@@ -1171,6 +1478,17 @@ struct NativeRichTextEditor {
             view.didResolveTypingAttributes = { [weak coordinator = context.coordinator] in coordinator?.publishSelection() }
             view.copyStructured = { [weak coordinator = context.coordinator] cut in coordinator?.copyStructured(cut: cut) ?? false }
             view.pasteStructured = { [weak coordinator = context.coordinator] in coordinator?.pasteStructured() ?? false }
+            view.linkTextAttributes = NativeTextAttributes.linkTextAttributes
+            view.displaysLinkToolTips = true
+            #if os(iOS)
+                view.tintColor = AppTheme.nativeAccent
+            #endif
+            #if os(iOS)
+                view.moveLeftFromListStart = { [weak coordinator = context.coordinator] in coordinator?.moveLeftFromListStart() ?? false }
+                view.backspaceAtParagraphStart = { [weak coordinator = context.coordinator] in
+                    coordinator?.backspaceAtParagraphStart() ?? false
+                }
+            #endif
             view.refreshTables = { [weak coordinator = context.coordinator] in coordinator?.refreshTables() }
             view.editLink = { [weak coordinator = context.coordinator] in coordinator?.parent.onEditLink() }
             view.toggleTask = { [weak coordinator = context.coordinator] index in coordinator?.toggleTask(at: index) ?? false }
@@ -1180,7 +1498,9 @@ struct NativeRichTextEditor {
             view.autoresizingMask = [.width]
             view.minSize = .zero
             view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            view.replaceTextContainer(CodeTextContainer(size: view.textContainer?.size ?? .zero))
             view.textContainer?.replaceLayoutManager(CodeLayoutManager())
+            (view.layoutManager as? CodeLayoutManager)?.codeDisplayView = view
             view.textContainer?.widthTracksTextView = true
             scroll.documentView = view
             view.isRichText = true
@@ -1208,6 +1528,10 @@ struct NativeRichTextEditor {
             intercept(range: affectedCharRange, replacement: replacementString)
         }
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            if selector == #selector(NSResponder.moveLeft(_:)) || selector == #selector(NSResponder.moveBackward(_:)) {
+                if moveLeftFromListStart() { return true }
+            }
+            if selector == #selector(NSResponder.deleteBackward(_:)), backspaceAtParagraphStart() { return true }
             if selector == #selector(NSResponder.deleteBackward(_:)),
                 textView.string.isEmpty,
                 textView.selectedRange() == NSRange(location: 0, length: 0)
@@ -1247,18 +1571,78 @@ struct NativeRichTextEditor {
     }
 #else
     private final class ReadingTextView: UITextView, UIGestureRecognizerDelegate {
+        private lazy var codePan = UIPanGestureRecognizer(target: self, action: #selector(scrollCodeHorizontally(_:)))
+        private var panningCodeID: String?
+        private var panningCodeVertically = false
+
+        func installCodeScrolling() {
+            codePan.delegate = self
+            addGestureRecognizer(codePan)
+            panGestureRecognizer.require(toFail: codePan)
+        }
+
+        override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === codePan else { return super.gestureRecognizerShouldBegin(gestureRecognizer) }
+            let velocity = codePan.velocity(in: self)
+            guard let layout = layoutManager as? CodeLayoutManager else { return false }
+            panningCodeVertically = abs(velocity.y) >= abs(velocity.x)
+            let point = codePan.location(in: self)
+            panningCodeID = layout.scrollableCode(
+                at: CGPoint(x: point.x - textContainerInset.left, y: point.y - textContainerInset.top), in: textContainer,
+                vertical: panningCodeVertically)
+            return panningCodeID != nil
+        }
+
+        @objc private func scrollCodeHorizontally(_ recognizer: UIPanGestureRecognizer) {
+            guard let id = panningCodeID, let layout = layoutManager as? CodeLayoutManager else { return }
+            if panningCodeVertically {
+                layout.scrollCodeVertically(id: id, delta: -recognizer.translation(in: self).y, in: textContainer, showIndicator: true)
+            } else {
+                layout.scrollCode(id: id, delta: -recognizer.translation(in: self).x, in: textContainer, showIndicator: true)
+            }
+            recognizer.setTranslation(.zero, in: self)
+            setNeedsDisplay()
+            refreshTables?()
+            if recognizer.state == .ended || recognizer.state == .cancelled { panningCodeID = nil }
+        }
+
         var exitEmptyQuote: (() -> Bool)?
         var copyStructured: ((Bool) -> Bool)?
         var pasteStructured: (() -> Bool)?
         override func copy(_ sender: Any?) { if copyStructured?(false) != true { super.copy(sender) } }
         override func cut(_ sender: Any?) { if copyStructured?(true) != true { super.cut(sender) } }
         override func paste(_ sender: Any?) { if pasteStructured?() != true { super.paste(sender) } }
+        var moveLeftFromListStart: (() -> Bool)?
+        override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+            if markedTextRange == nil, presses.count == 1, let key = presses.first?.key,
+                key.keyCode == .keyboardUpArrow || key.keyCode == .keyboardDownArrow,
+                let layout = layoutManager as? CodeLayoutManager
+            {
+                let down = key.keyCode == .keyboardDownArrow
+                layout.prepareCodeVerticalMovement(
+                    from: down ? NSMaxRange(selectedRange) : selectedRange.location,
+                    down: down, in: textContainer)
+            }
+            if presses.count == 1, let key = presses.first?.key, key.keyCode == .keyboardLeftArrow,
+                key.modifierFlags.isEmpty, moveLeftFromListStart?() == true
+            {
+                return
+            }
+            super.pressesBegan(presses, with: event)
+        }
+        var backspaceAtParagraphStart: (() -> Bool)?
         override func deleteBackward() {
+            if backspaceAtParagraphStart?() == true { return }
             if text.isEmpty, selectedRange == NSRange(location: 0, length: 0), exitEmptyQuote?() == true { return }
             super.deleteBackward()
         }
         override func draw(_ rect: CGRect) {
             super.draw(rect)
+            if let layout = layoutManager as? CodeLayoutManager {
+                layout.drawEmptyListMarker(
+                    selection: selectedRange, attributes: typingAttributes,
+                    origin: CGPoint(x: textContainerInset.left, y: textContainerInset.top), in: textContainer)
+            }
             let source = text as NSString
             let insertion = min(selectedRange.location, source.length)
             let paragraph = source.paragraphRange(for: NSRange(location: insertion, length: 0))
@@ -1328,6 +1712,7 @@ struct NativeRichTextEditor {
             _ = toggleTask?(marker)
         }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            if gestureRecognizer === codePan { return true }
             guard gestureRecognizer is UITapGestureRecognizer,
                 let layout = layoutManager as? CodeLayoutManager
             else { return true }
@@ -1371,6 +1756,8 @@ struct NativeRichTextEditor {
                 textContainerInset = UIEdgeInsets(top: DocumentTypography.editorTopInset, left: inset, bottom: 40, right: inset)
             }
             super.layoutSubviews()
+            // Wide code fragments scroll inside their block, never the whole document.
+            if contentSize.width != bounds.width { contentSize.width = bounds.width }
             refreshTables?()
             refreshTaskAccessibilityActions()
         }
@@ -1381,13 +1768,25 @@ struct NativeRichTextEditor {
             let storage = NSTextStorage()
             let layout = CodeLayoutManager()
             storage.addLayoutManager(layout)
-            let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+            let container = CodeTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
             container.widthTracksTextView = true
             layout.addTextContainer(container)
             let view = ReadingTextView(frame: .zero, textContainer: container)
+            layout.codeDisplayView = view
+            view.installCodeScrolling()
             view.exitEmptyQuote = { [weak coordinator = context.coordinator] in coordinator?.exitEmptyQuote() ?? false }
             view.copyStructured = { [weak coordinator = context.coordinator] cut in coordinator?.copyStructured(cut: cut) ?? false }
             view.pasteStructured = { [weak coordinator = context.coordinator] in coordinator?.pasteStructured() ?? false }
+            view.linkTextAttributes = NativeTextAttributes.linkTextAttributes
+            #if os(iOS)
+                view.tintColor = AppTheme.nativeAccent
+            #endif
+            #if os(iOS)
+                view.moveLeftFromListStart = { [weak coordinator = context.coordinator] in coordinator?.moveLeftFromListStart() ?? false }
+                view.backspaceAtParagraphStart = { [weak coordinator = context.coordinator] in
+                    coordinator?.backspaceAtParagraphStart() ?? false
+                }
+            #endif
             view.refreshTables = { [weak coordinator = context.coordinator] in coordinator?.refreshTables() }
             view.toggleTask = { [weak coordinator = context.coordinator] index in coordinator?.toggleTask(at: index) ?? false }
             view.toggleEmptyTask = { [weak coordinator = context.coordinator] in coordinator?.toggleEmptyTask() ?? false }

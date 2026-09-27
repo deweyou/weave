@@ -1,9 +1,15 @@
 import Foundation
 import SwiftUI
 
+struct NoteFolder: Identifiable, Codable, Equatable, Sendable {
+    var id: UUID
+    var name: String
+}
+
 struct Note: Identifiable, Codable, Equatable, Sendable {
     var id: UUID
     var title: String
+    var folderID: UUID?
     var richText: AttributedString
     var text: String {
         get { TableData.plainText(in: richText) }
@@ -12,21 +18,23 @@ struct Note: Identifiable, Codable, Equatable, Sendable {
     var createdAt: Date
     var updatedAt: Date
 
-    init(id: UUID, text: String, createdAt: Date, updatedAt: Date, title: String = "") {
+    init(id: UUID, text: String, createdAt: Date, updatedAt: Date, title: String = "", folderID: UUID? = nil) {
         self.id = id
         self.title = title
+        self.folderID = folderID
         self.richText = AttributedString(text)
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, titleSeparated, text, richText, createdAt, updatedAt
+        case id, title, titleSeparated, text, richText, createdAt, updatedAt, folderID
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
+        folderID = try container.decodeIfPresent(UUID.self, forKey: .folderID)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         let plainText = try container.decode(String.self, forKey: .text)
@@ -64,6 +72,7 @@ struct Note: Identifiable, Codable, Equatable, Sendable {
     func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(folderID, forKey: .folderID)
         try container.encode(title, forKey: .title)
         try container.encode(true, forKey: .titleSeparated)
         try container.encode(text, forKey: .text)
