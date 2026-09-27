@@ -78,7 +78,7 @@ python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView、MacWorkspaceView、MobileWorkspaceView 、NativeTableView 和 Toast；ToastPresenter 仍归入核心逻辑组。桥接组包含 NativeRichTextEditor、NativeTextAttributes 与 NativeTableOverlay。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；当前平台编译的全部文件均计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView、MacWorkspaceView、MobileWorkspaceView 、NativeTableView 和 Toast；ToastPresenter 仍归入核心逻辑组。桥接组包含 NativeRichTextEditor、NativeTextAttributes、NativeTableOverlay 与 NativeRecordGallery。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；当前平台编译的全部文件均计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
 
 Package 单测运行在 Mac，覆盖率脚本默认 `--platform macos`：明确列出且排除整个文件受 `#if os(iOS)` 包裹的 `App/MobileWorkspaceView.swift`；`--platform ios` 对应排除 Mac 专属工作区文件。平台专属映射以完整相对路径列举，其他新增文件仍须有报告。移动端工作区行为由 iOS UI 测试验证，不能将 Mac 单测覆盖率当作它的覆盖率。
 
@@ -195,3 +195,21 @@ Toast 光标回归：`PointerRegionTests` 在同窗口叠放正文与按钮区�
 链接悬停自动化分别注入普通动画与减少动态效果偏好，避免依赖 CI 主机的辅助功能设置；颜色比较使用同色域 RGBA 分量，允许平台颜色对象的 HDR 元数据不同。真实辅助功能体验仍需设备验证。
 
 代码块末尾边界：空围栏输入正文后保留末尾换行；光标在该换行符之前按 Return 应继续代码及当前缩进，只有位于换行符之后的空行才执行退出。覆盖 Tab、撤销、重做后续行，核对选区位置、语言属性与末尾换行。Mac 分类回归需在当前分类搜索无结果后再次点击同一分类，确认清空搜索并恢复记录列表。
+
+
+## 瀑布流虚拟化与性能
+
+- `swift test --filter 'RecordGalleryPerformanceTests|RecordMasonryLayoutTests'`：验证最短列、窄宽布局、按列索引与全量矩形交集的一致性；1,000 / 10,000 条记录连续查询 1,000 个视口，断言滚动不重复测量、可见卡片数量有界。输出首次布局与视口查询耗时；耗时用于同机同配置比较，不设置易受 CI 负载影响的固定毫秒门槛。
+- 原生 Mac 集成用例创建真实 CollectionView，滚动 1,000 条记录，断言创建宿主数量小于 100、可见数量小于 60；检查滚动偏移和重置。短文、中英混排、emoji、多行截断在多种列宽下与实际 SwiftUI 卡片高度对照。
+- `WeaveUITests/testLargeGalleryScrollPerformance` 使用 Debug 专用 `WEAVE_UI_TEST_GALLERY_COUNT=1000`，仅配合有效 `WEAVE_UI_TEST_SESSION` UUID 生效且只填充不存在的测试存储。测试记录 3 轮往返滚动的 wall clock、App CPU 与内存指标，保存到 xcresult。此指标包含自动化动作等待，不能当作帧耗时或 FPS；应在同设备、同工具链和同构建配置下比较。支持 10,000 条人工压力样本，但不默认扩大所有 UI 测试。
+
+```sh
+xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/ui-gallery-macos -parallel-testing-enabled NO -only-testing:WeaveUITests/WeaveUITests/testLargeGalleryScrollPerformance CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-gallery-ios -parallel-testing-enabled NO -only-testing:WeaveUITests/WeaveUITests/testLargeGalleryScrollPerformance CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+```
+
+界面回归仍需覆盖：快速往返滚动后打开正确记录、返回恢复位置、搜索/分类清空与重置、右键/长按移动、窗口宽度和 Dynamic Type 改变、浅深色、VoiceOver 与卡片 pointer。原生集成通过不代表 UI 自动化或全部辅助功能已验收；首次全库加载和首轮文本测量与稳态滚动分别报告。
+
+macOS UI 用例使用 `click()` 发送鼠标事件，原生分类弹窗可用 Return 提交。运行期间需保持测试 App 在前台；XCTest 日志若出现其他应用的 `interrupting element`，应按桌面交互干扰排查，不能据此判断业务通过或失败。
+
+瀑布流的 Mac 实测：千条记录的 3 轮往返滚动、滚动后打开记录及返回位置恢复 UI 用例已通过。分类整理与搜索回归此次受其他应用窗口遮挡影响，完整流程尚未通过；布局、视口查询与宿主复用测试的结果应与这些 UI 回归分别报告。

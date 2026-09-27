@@ -10,7 +10,9 @@
 | `Sources/Weave/App/Toast.swift` | Liquid Glass 反馈浮层；生命周期由 SwiftUI task 管理 |
 | `Sources/Weave/App/AppTheme.swift` | SwiftUI 与原生绘制共用的主题色，默认系统蓝；不属于文档持久化属性 |
 | `Sources/Weave/App/WeaveApp.swift` | 生命周期、存储实例、Mac 新建命令 |
-| `Sources/Weave/App/WorkspaceView.swift` | 平台入口、共享记录瀑布流、记录编辑器及格式菜单 |
+| `Sources/Weave/App/NativeRecordGallery.swift` | NSCollectionView / UICollectionView 复用、SwiftUI 卡片宿主与滚动恢复 |
+| `Sources/Weave/App/RecordGalleryLayout.swift` | 摘要高度缓存、最短列几何与可见区域索引 |
+| `Sources/Weave/App/WorkspaceView.swift` | 平台入口、记录卡片、记录编辑器及格式菜单 |
 | `Sources/Weave/App/MobileWorkspaceView.swift` | iOS/iPadOS 自适应双栏、分类选择、卡片与编辑导航栈、长按整理与移动分类 sheet |
 | `Sources/Weave/App/MacWorkspaceView.swift` | Mac 综合侧栏、分类/搜索、右侧浏览与编辑、窗口级导航与新建命令上下文 |
 | `Sources/Weave/Editor/Native/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、选区、输入事件和平台交互 |
@@ -75,7 +77,9 @@
 
 `scripts/check_coverage.py` 读取 LLVM 覆盖率，按核心、桥接、全源码执行门禁；`.github/workflows/ci.yml` 运行单测和两端 UI 测试。Debug App 支持 UUID 命名的隔离测试存储，Release 使用正常存储。具体命令、门槛与限制见[验证清单](verification.md)。
 
-记录瀑布流使用 `RecordMasonryLayout` 按实际列宽测量卡片并填入最短列，记录顺序和 ID 保持稳定。当前自定义 Layout 会测量全部卡片，尚无离屏虚拟化；大资料库的性能需独立验证。
+记录瀑布流由 macOS 的 `NSCollectionView` 和 iOS/iPadOS 的 `UICollectionView` 按可见区域创建、复用 SwiftUI 卡片宿主。共享 `RecordMasonryLayout` 按最短列排布，保留记录顺序与 UUID。`RecordGalleryLayout` 使用当前 SwiftUI 字体解析得到的 Core Text 字体测量标题和最多 600 字的摘要；按记录、列宽和排版设置缓存高度，正文未变的记录可跨排序和编辑页返回复用缓存。列宽或系统字号变化会重新测量；这与数据分页独立，笔记仍整库载入。
+
+布局保存全量轻量矩形及各列的纵向索引，可见区域查询按列二分查找，不在每次滚动时全量扫描或测量。首次布局和宽度变化仍需 O(n) 文本测量与几何准备，不承诺大库首屏恒定耗时。滚动偏移写入非观察属性，避免每帧触发工作区筛选与排序；切换分类和搜索通过显式重置代数归零，打开记录返回后恢复像素偏移。移动端卡片通过外层导航路径打开记录，不依赖独立宿主中的 NavigationLink 环境。
 
 收藏功能及模型字段已删除。解码时忽略旧文件中的 `isFavorite` 字段，下次保存不再写出该字段；记录内容和分类不受影响。
 
