@@ -23,9 +23,11 @@ struct RecordCard: View {
     #if os(macOS)
         @ScaledMetric private var minimumHeight = 120.0
         @ScaledMetric private var maximumHeight = 320.0
+        private let cornerRadius: CGFloat = 12
     #else
         @ScaledMetric private var minimumHeight = 112.0
         @ScaledMetric private var maximumHeight = 280.0
+        private let cornerRadius: CGFloat = 16
     #endif
 
     var body: some View {
@@ -43,11 +45,11 @@ struct RecordCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: minimumHeight, maxHeight: maximumHeight, alignment: .top)
-        .background(.background, in: RoundedRectangle(cornerRadius: 16))
+        .background(.background, in: RoundedRectangle(cornerRadius: cornerRadius))
         .overlay {
-            RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(.primary.opacity(0.1), lineWidth: 1)
         }
-        .contentShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
 }
 
@@ -139,91 +141,96 @@ struct NoteEditorView: View {
         .onChange(of: note.id) { _, _ in toast.clear() }
         .onDisappear { toast.clear() }
         .navigationTitle(note.displayTitle)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Menu("格式", systemImage: "textformat") {
-                    Button(formatLabel("加粗") { DocumentTypography.emphasis(in: $0, context: fontContext) & 1 != 0 }, systemImage: "bold") {
-                        toggleBold()
-                    }
-                    .keyboardShortcut("b", modifiers: .command)
-                    Button(formatLabel("斜体") { DocumentTypography.emphasis(in: $0, context: fontContext) & 2 != 0 }, systemImage: "italic")
-                    { toggleItalic() }
-                    .keyboardShortcut("i", modifiers: .command)
-                    Button(formatLabel("下划线") { $0.underlineStyle != nil }, systemImage: "underline") {
-                        format { $0.underlineStyle = $0.underlineStyle == nil ? .single : nil }
-                    }
-                    .keyboardShortcut("u", modifiers: .command)
-                    Button(formatLabel("删除线") { $0.strikethroughStyle != nil }, systemImage: "strikethrough") {
-                        format { $0.strikethroughStyle = $0.strikethroughStyle == nil ? .single : nil }
-                    }
-                    Divider()
-                    ForEach(1...6, id: \.self) { level in
-                        Button("标题 \(level)") { paragraph("heading:\(level)") }
-                    }
-                    Button("正文") { paragraph("body") }
-                    Button("无序列表") { paragraph("bullet") }
-                    Button("有序列表") { paragraph("numbered") }
-                    Button("待办列表") { paragraph("task") }
-                    Button("引用") { paragraph("quote") }
-                    Button("代码块") { paragraph("code") }
-                    Button("插入表格", systemImage: "tablecells") { insertTable() }
-                    Button("增加列表缩进") { indentList(outdent: false) }
-                    Button("减少列表缩进") { indentList(outdent: true) }
-                    Button("切换待办完成状态") { toggleTask() }
+        #if os(iOS)
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Menu("格式", systemImage: "textformat") {
+                        Button(
+                            formatLabel("加粗") { DocumentTypography.emphasis(in: $0, context: fontContext) & 1 != 0 }, systemImage: "bold"
+                        ) {
+                            toggleBold()
+                        }
+                        .keyboardShortcut("b", modifiers: .command)
+                        Button(
+                            formatLabel("斜体") { DocumentTypography.emphasis(in: $0, context: fontContext) & 2 != 0 }, systemImage: "italic"
+                        ) { toggleItalic() }
+                        .keyboardShortcut("i", modifiers: .command)
+                        Button(formatLabel("下划线") { $0.underlineStyle != nil }, systemImage: "underline") {
+                            format { $0.underlineStyle = $0.underlineStyle == nil ? .single : nil }
+                        }
+                        .keyboardShortcut("u", modifiers: .command)
+                        Button(formatLabel("删除线") { $0.strikethroughStyle != nil }, systemImage: "strikethrough") {
+                            format { $0.strikethroughStyle = $0.strikethroughStyle == nil ? .single : nil }
+                        }
+                        Divider()
+                        ForEach(1...6, id: \.self) { level in
+                            Button("标题 \(level)") { paragraph("heading:\(level)") }
+                        }
+                        Button("正文") { paragraph("body") }
+                        Button("无序列表") { paragraph("bullet") }
+                        Button("有序列表") { paragraph("numbered") }
+                        Button("待办列表") { paragraph("task") }
+                        Button("引用") { paragraph("quote") }
+                        Button("代码块") { paragraph("code") }
+                        Button("插入表格", systemImage: "tablecells") { insertTable() }
+                        Button("增加列表缩进") { indentList(outdent: false) }
+                        Button("减少列表缩进") { indentList(outdent: true) }
+                        Button("切换待办完成状态") { toggleTask() }
                         .keyboardShortcut(.return, modifiers: [.command, .shift])
-                    Divider()
-                    Button("添加或编辑链接…", systemImage: "link") {
-                        linkAddress = selection.attributes(in: richText).compactMap { $0.link?.absoluteString }.first ?? ""
-                        showsLinkEditor = true
-                    }
-                    .keyboardShortcut("k", modifiers: .command)
-                    .disabled(!hasSelection)
-                    Button("移除链接") { format { $0.link = nil } }
+                        Divider()
+                        Button("添加或编辑链接…", systemImage: "link") {
+                            linkAddress = selection.attributes(in: richText).compactMap { $0.link?.absoluteString }.first ?? ""
+                            showsLinkEditor = true
+                        }
+                        .keyboardShortcut("k", modifiers: .command)
                         .disabled(!hasSelection)
-                    Button("清除文字格式") {
-                        format {
-                            $0.font = .body
-                            $0.underlineStyle = nil
-                            $0.strikethroughStyle = nil
-                            $0.foregroundColor = nil
-                            $0.backgroundColor = nil
-                            $0.link = nil
-                            $0[CodeStyleAttribute.self] = nil
+                        Button("移除链接") { format { $0.link = nil } }
+                        .disabled(!hasSelection)
+                        Button("清除文字格式") {
+                            format {
+                                $0.font = .body
+                                $0.underlineStyle = nil
+                                $0.strikethroughStyle = nil
+                                $0.foregroundColor = nil
+                                $0.backgroundColor = nil
+                                $0.link = nil
+                                $0[CodeStyleAttribute.self] = nil
+                            }
+                        }
+                        Button("等宽代码", systemImage: "chevron.left.forwardslash.chevron.right") {
+                            toggleCode()
                         }
                     }
-                    Button("等宽代码", systemImage: "chevron.left.forwardslash.chevron.right") {
-                        toggleCode()
-                    }
-                }
-                .accessibilityLabel("格式")
-                .disabled(isTitleFocused)
-                .help("设置文字格式")
-                Menu("Markdown", systemImage: "text.badge.checkmark") {
-                    Button("复制为 Markdown", systemImage: "doc.on.doc") { copyMarkdown() }
+                    .accessibilityLabel("格式")
+                    .disabled(isTitleFocused)
+                    .help("设置文字格式")
+                    Menu("Markdown", systemImage: "text.badge.checkmark") {
+                        Button("复制为 Markdown", systemImage: "doc.on.doc") { copyMarkdown() }
                         .accessibilityIdentifier("copy-markdown")
-                    Button("导出 Markdown…", systemImage: "square.and.arrow.up") {
-                        exportDocument = MarkdownFile(source: MarkdownFormatting.serialize(richText, context: fontContext))
-                        showsExport = true
-                    }
-                    .accessibilityIdentifier("export-markdown")
-                    Divider()
-                    Button("将选区 Markdown 排版") { convertMarkdown(wholeDocument: false) }
+                        Button("导出 Markdown…", systemImage: "square.and.arrow.up") {
+                            exportDocument = MarkdownFile(source: MarkdownFormatting.serialize(richText, context: fontContext))
+                            showsExport = true
+                        }
+                        .accessibilityIdentifier("export-markdown")
+                        Divider()
+                        Button("将选区 Markdown 排版") { convertMarkdown(wholeDocument: false) }
                         .disabled(!hasSelection)
-                    Button("将全文 Markdown 排版") { convertMarkdown(wholeDocument: true) }
+                        Button("将全文 Markdown 排版") { convertMarkdown(wholeDocument: true) }
                         .disabled(richText.characters.isEmpty)
-                    Divider()
-                    Button("支持的语法") { showsMarkdownHelp = true }
+                        Divider()
+                        Button("支持的语法") { showsMarkdownHelp = true }
+                    }
+                    .accessibilityLabel("Markdown")
+                    .help("Markdown 导出、复制与排版")
                 }
-                .accessibilityLabel("Markdown")
-                .help("Markdown 导出、复制与排版")
-            }
-            ToolbarItem(placement: .automatic) {
-                Text("\(TableData.plainText(in: richText).count) 字符")
+                ToolbarItem(placement: .automatic) {
+                    Text("\(TableData.plainText(in: richText).count) 字符")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
             }
-        }
-        .safeAreaInset(edge: .top, spacing: 0) { formattingBar.disabled(isTitleFocused) }
+            .safeAreaInset(edge: .top, spacing: 0) { formattingBar.disabled(isTitleFocused) }
+        #endif
         .fileExporter(
             isPresented: $showsExport, document: exportDocument, contentType: MarkdownFile.contentType,
             defaultFilename: note.markdownFilename

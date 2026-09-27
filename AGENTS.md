@@ -38,7 +38,7 @@
 
 ## 设计 skills 的使用边界
 
-UI 任务使用 [apple-design](.agents/skills/apple-design/SKILL.md)；视觉审核按需加用 [high-end-visual-design](.agents/skills/high-end-visual-design/SKILL.md)。二者包含 Web 专用建议，使用前先读 DESIGN.md 的适配规则。
+UI 任务必读 [Apple 原生界面设计规则](.agents/rules/apple-native-design.md) 与 DESIGN.md；视觉、动效和交互要求统一由 rules 维护。视觉审核按需加用 [high-end-visual-design](.agents/skills/high-end-visual-design/SKILL.md)，其 Web 专用建议先按 DESIGN.md 适配。
 
 沿用用户确认的 Apple 原生控件、系统字体、SF Symbols、正文清晰背景和稳定编辑。界面图标默认使用 SF Symbols；例外条件、依赖边界和验收要求见 `DESIGN.md` 的“图标系统”。审美 skill 用于检查层级、留白、材质与反馈，不引入 React/Tailwind、营销页布局、强制入场动画或随机视觉风格；不为满足第三方 skill 更换原生技术路线。
 

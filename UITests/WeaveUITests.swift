@@ -98,7 +98,7 @@ final class WeaveUITests: XCTestCase {
         #endif
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         #if os(macOS)
-            app.buttons["back-to-notes"].click()
+            app.buttons["workspace-notes"].click()
         #else
             app.navigationBars.buttons.element(boundBy: 0).tap()
         #endif
@@ -111,7 +111,6 @@ final class WeaveUITests: XCTestCase {
 
     private func newNote() {
         #if os(macOS)
-            // On small desktops the toolbar action moves into its overflow menu.
             // A fresh store exposes the primary action in the empty detail view.
             let button = app.buttons["empty-new-note"]
         #else
@@ -144,89 +143,37 @@ final class WeaveUITests: XCTestCase {
             ).firstMatch
         }
 
-        func testMacRecordGalleryAndReturn() {
+        func testMacCleanWorkspaceAndNoteList() {
+            XCTAssertFalse(app.buttons["new-folder"].exists)
+            XCTAssertFalse(app.buttons["import-markdown"].exists)
+            XCTAssertFalse(app.searchFields.firstMatch.exists)
             newNote()
             app.textFields["note-title"].click()
-            app.textFields["note-title"].typeText("Gallery record\n")
-            editor.typeText("A quick thought for the gallery")
-            app.buttons["back-to-notes"].click()
-            XCTAssertTrue(app.scrollViews["record-gallery"].waitForExistence(timeout: 5))
-            let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "note-row-")).firstMatch
-            XCTAssertTrue(card.waitForExistence(timeout: 5))
-            card.click()
-            expectText("A quick thought for the gallery")
-            app.buttons["back-to-notes"].click()
-            let search = app.searchFields.firstMatch
-            search.click()
-            search.typeText("thought")
-            XCTAssertTrue(card.exists)
-            search.typeText(" missing")
-            XCTAssertFalse(card.exists)
-            app.staticTexts["全部记录"].firstMatch.click()
-            XCTAssertTrue(card.waitForExistence(timeout: 5))
-        }
-
-        func testMacLibraryFoldersAndSearch() {
-            app.buttons["new-folder"].click()
-            let field = app.textFields["分类名称"]
-            XCTAssertTrue(field.waitForExistence(timeout: 5))
-            field.typeText("Layout category")
-            field.typeText("\n")
-            let createdFolder = app.descendants(matching: .any).matching(
-                NSPredicate(format: "identifier BEGINSWITH %@", "folder-row-")
+            app.textFields["note-title"].typeText("First record\n")
+            editor.click()
+            editor.typeText("A quick thought")
+            XCTAssertFalse(app.menuButtons["Markdown"].exists)
+            XCTAssertFalse(app.menuButtons["textformat"].exists)
+            XCTAssertFalse(app.buttons["format-bold"].exists)
+            app.buttons["new-note"].click()
+            app.textFields["note-title"].click()
+            app.textFields["note-title"].typeText("Second record\n")
+            editor.click()
+            editor.typeText("Another thought")
+            let firstNote = app.staticTexts.matching(
+                NSPredicate(format: "identifier BEGINSWITH %@ AND value == %@", "sidebar-note-", "First record")
             ).firstMatch
-            XCTAssertTrue(createdFolder.waitForExistence(timeout: 5))
-            let folderIdentifier = createdFolder.identifier
-            newNote()
-            let title = app.textFields["note-title"]
-            title.click()
-            title.typeText("Layout note")
-            title.typeText("\n")
-            editor.typeText("Content search token")
-            app.buttons["back-to-notes"].click()
-            XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
-            app.staticTexts["全部记录"].firstMatch.click()
-            XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
-            XCTAssertTrue(app.scrollViews["record-gallery"].exists)
-            let search = app.searchFields.firstMatch
-            XCTAssertTrue(search.waitForExistence(timeout: 5))
-            search.click()
-            search.typeText("search token")
-            XCTAssertTrue(recordCard(titled: "Layout note").exists)
-            search.typeText(" missing")
-            XCTAssertFalse(recordCard(titled: "Layout note").exists)
-            app.staticTexts["全部记录"].firstMatch.click()
-            XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
-            recordCard(titled: "Layout note").click()
-            app.menuButtons["organize-note"].click()
-            app.menuItems["移动到分类"].click()
-            app.menuItems["未分类"].click()
-            app.buttons["back-to-notes"].click()
-            app.staticTexts["未分类"].firstMatch.click()
-            XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
+            XCTAssertTrue(firstNote.waitForExistence(timeout: 5))
+            firstNote.click()
+            expectText("A quick thought")
+            app.buttons["workspace-notes"].click()
+            XCTAssertTrue(app.scrollViews["record-gallery"].waitForExistence(timeout: 5))
+            recordCard(titled: "Second record").click()
+            expectText("Another thought")
             app.terminate()
             app.launch()
-            app.staticTexts["全部记录"].firstMatch.click()
-            recordCard(titled: "Layout note").click()
-            expectText("Content search token")
-            app.buttons["back-to-notes"].click()
-            let restoredFolder = app.descendants(matching: .any).matching(identifier: folderIdentifier).firstMatch
-            XCTAssertTrue(restoredFolder.waitForExistence(timeout: 5))
-            restoredFolder.click()
-            XCTAssertTrue(app.buttons["empty-new-note"].waitForExistence(timeout: 5))
-        }
-
-        private func copiedMarkdown() -> String {
-            let pasteboard = NSPasteboard.general
-            let previousChangeCount = pasteboard.changeCount
-            app.menuButtons["Markdown"].tap()
-            app.menuItems["copy-markdown"].tap()
-            let deadline = Date().addingTimeInterval(3)
-            while pasteboard.changeCount == previousChangeCount, Date() < deadline {
-                RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-            }
-            XCTAssertNotEqual(pasteboard.changeCount, previousChangeCount, "复制 Markdown 后剪贴板应更新")
-            return pasteboard.string(forType: .string) ?? ""
+            recordCard(titled: "First record").click()
+            expectText("A quick thought")
         }
     #endif
 
@@ -267,15 +214,18 @@ final class WeaveUITests: XCTestCase {
         expectText("Textbold\nFirst\nSecond")
     }
 
-    func testEmptyNoteCanStartTaskListFromToolbar() {
-        newNote()
-        let tasks = app.buttons["待办列表"]
-        XCTAssertTrue(tasks.waitForExistence(timeout: 5))
-        tasks.tap()
-        editor.tap()
-        editor.typeText("First task")
-        expectText("First task")
-    }
+    #if os(iOS)
+        func testEmptyNoteCanStartTaskListFromToolbar() {
+            newNote()
+            let tasks = app.buttons["待办列表"]
+            XCTAssertTrue(tasks.waitForExistence(timeout: 5))
+            tasks.tap()
+            editor.tap()
+            editor.typeText("First task")
+            expectText("First task")
+        }
+
+    #endif
 
     #if os(iOS)
         func testIPadEditorSurvivesRotation() throws {
@@ -325,7 +275,10 @@ final class WeaveUITests: XCTestCase {
             app.navigationBars.buttons.element(boundBy: 0).tap()
             XCTAssertTrue(app.buttons["workspace-tasks"].waitForExistence(timeout: 5))
             app.buttons["workspace-tasks"].tap()
-            XCTAssertTrue(app.staticTexts["任务稍后推出"].waitForExistence(timeout: 5))
+            let taskPlaceholder = app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", "任务稍后推出")
+            ).firstMatch
+            XCTAssertTrue(taskPlaceholder.waitForExistence(timeout: 5))
         }
 
         func testMobileLibraryOrganizationAndRestoration() {
@@ -427,7 +380,6 @@ final class WeaveUITests: XCTestCase {
             editor.typeText("\n")
             editor.typeText("Body")
             expectText("1\nBody")
-            XCTAssertEqual(copiedMarkdown(), "> 1\n\nBody")
         }
 
         func testBackspaceOnEmptiedHeadingClearsHeadingStyle() {
@@ -439,7 +391,6 @@ final class WeaveUITests: XCTestCase {
             editor.typeKey(.delete, modifierFlags: [])
             editor.typeText("Body")
             expectText("Body")
-            XCTAssertEqual(copiedMarkdown(), "Body")
         }
 
         func testDeletingInlineCodeContentClearsTypingStyle() {
@@ -452,95 +403,6 @@ final class WeaveUITests: XCTestCase {
             editor.typeKey(.delete, modifierFlags: [])
             editor.typeText("next")
             expectText("next")
-            XCTAssertEqual(copiedMarkdown(), "next")
-        }
-
-        func testTableEditsInlineAndRestoresAfterRelaunch() {
-            newNote()
-            app.buttons["insert-table"].tap()
-            let first = app.textFields["table-cell-0-0"]
-            XCTAssertTrue(first.waitForExistence(timeout: 5))
-            first.tap()
-            first.typeText("Name")
-            app.typeKey(.tab, modifierFlags: [])
-            app.typeText("Value")
-            app.typeKey(.tab, modifierFlags: [])
-            app.typeText("Alpha")
-            app.typeKey(.tab, modifierFlags: [])
-            app.typeText("42")
-            XCTAssertEqual(app.textFields["table-cell-0-1"].value as? String, "Value")
-            XCTAssertEqual(app.textFields["table-cell-1-0"].value as? String, "Alpha")
-            XCTAssertEqual(app.textFields["table-cell-1-1"].value as? String, "42")
-            app.typeKey(.tab, modifierFlags: [])
-            let added = app.textFields["table-cell-2-0"]
-            XCTAssertTrue(added.waitForExistence(timeout: 5))
-            app.typeText("Beta")
-            XCTAssertEqual(added.value as? String, "Beta")
-            app.buttons["table-exit"].tap()
-            app.typeText("After table")
-            XCTAssertTrue((editor.value as? String)?.hasSuffix("After table") == true)
-            app.menuButtons["Markdown"].tap()
-            app.menuItems["copy-markdown"].tap()
-            let markdown = NSPasteboard.general.string(forType: .string) ?? ""
-            XCTAssertTrue(markdown.contains("| Name | Value |"))
-            XCTAssertTrue(markdown.contains("| Alpha | 42 |"))
-            XCTAssertTrue(markdown.contains("| Beta |  |"))
-            XCTAssertTrue(markdown.hasSuffix("After table"))
-            app.terminate()
-            app.launch()
-            app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "note-row-")).firstMatch.tap()
-            XCTAssertTrue(first.waitForExistence(timeout: 5))
-            XCTAssertEqual(first.value as? String, "Name")
-            XCTAssertEqual(app.textFields["table-cell-1-0"].value as? String, "Alpha")
-            XCTAssertEqual(app.textFields["table-cell-2-0"].value as? String, "Beta")
-            XCTAssertTrue((editor.value as? String)?.hasSuffix("After table") == true)
-        }
-
-        func testTableCutPastePreservesCellsAndCanUndo() {
-            newNote()
-            app.buttons["insert-table"].tap()
-            let header = app.textFields["table-cell-0-0"]
-            XCTAssertTrue(header.waitForExistence(timeout: 5))
-            header.tap()
-            header.typeText("Keep this table")
-            app.buttons["table-exit"].tap()
-            app.typeKey("a", modifierFlags: .command)
-            app.typeKey("x", modifierFlags: .command)
-            XCTAssertFalse(header.exists)
-            app.typeKey("v", modifierFlags: .command)
-            XCTAssertTrue(header.waitForExistence(timeout: 5))
-            XCTAssertEqual(header.value as? String, "Keep this table")
-            app.typeKey("z", modifierFlags: .command)
-            XCTAssertFalse(header.exists)
-            app.typeKey("z", modifierFlags: .command)
-            XCTAssertTrue(header.waitForExistence(timeout: 5))
-            XCTAssertEqual(header.value as? String, "Keep this table")
-        }
-
-        func testTableStructureAlignmentUndoAndRedo() {
-            newNote()
-            app.buttons["insert-table"].tap()
-            let actions = app.menuButtons["table-actions"]
-            XCTAssertTrue(actions.waitForExistence(timeout: 5))
-            actions.tap()
-            app.menuItems["在右侧插入列"].tap()
-            let thirdColumn = app.textFields["table-cell-0-2"]
-            XCTAssertTrue(thirdColumn.waitForExistence(timeout: 5))
-            app.buttons["table-exit"].tap()
-            app.typeKey("z", modifierFlags: .command)
-            XCTAssertFalse(thirdColumn.exists)
-            app.typeKey("z", modifierFlags: [.command, .shift])
-            XCTAssertTrue(thirdColumn.waitForExistence(timeout: 5))
-            thirdColumn.tap()
-            thirdColumn.typeText("Total")
-            app.menuButtons["table-alignment"].tap()
-            app.menuItems["右对齐"].tap()
-            app.menuButtons["Markdown"].tap()
-            app.menuItems["copy-markdown"].tap()
-            XCTAssertTrue(NSPasteboard.general.string(forType: .string)?.contains("| --- | --- | ---: |") == true)
-            actions.tap()
-            app.menuItems["删除当前列"].tap()
-            XCTAssertFalse(thirdColumn.exists)
         }
 
         func testCodeLanguageIndentAndUndo() {
@@ -565,39 +427,7 @@ final class WeaveUITests: XCTestCase {
             XCTAssertEqual(NSPasteboard.general.string(forType: .string), "  let value = 42\n  next\n")
             languageMenu.tap()
             app.menuItems["Python"].tap()
-            app.menuButtons["Markdown"].tap()
-            app.menuItems["copy-markdown"].tap()
-            XCTAssertTrue(NSPasteboard.general.string(forType: .string)?.hasPrefix("```python\n") == true)
-        }
-
-        func testMarkdownFileImportCreatesRenderedNote() throws {
-            let source = "# Imported document\n\n**Strong** and *emphasis*\n- [x] Done\n\n`literal`\n\n```\nlet value = 1\n```"
-            let file = FileManager.default.temporaryDirectory.appendingPathComponent("weave-import-\(UUID().uuidString).md")
-            try source.write(to: file, atomically: true, encoding: .utf8)
-            defer { try? FileManager.default.removeItem(at: file) }
-            let importer = app.buttons["import-markdown"]
-            if importer.waitForExistence(timeout: 2) {
-                importer.tap()
-            } else {
-                let overflow = app.popUpButtons["更多工具栏项"]
-                XCTAssertTrue(overflow.waitForExistence(timeout: 5))
-                overflow.tap()
-                let overflowImporter = app.menuItems["导入 Markdown…"]
-                XCTAssertTrue(overflowImporter.waitForExistence(timeout: 5))
-                overflowImporter.tap()
-            }
-            app.typeKey("g", modifierFlags: [.command, .shift])
-            let path = app.textFields["PathTextField"]
-            XCTAssertTrue(path.waitForExistence(timeout: 5))
-            path.typeText(file.path)
-            app.typeKey(.return, modifierFlags: [])
-            let open = app.buttons["OKButton"]
-            XCTAssertTrue(open.waitForExistence(timeout: 5))
-            expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: open)
-            waitForExpectations(timeout: 5)
-            open.tap()
-            XCTAssertTrue(editor.waitForExistence(timeout: 5))
-            expectText("Imported document\nStrong and emphasis\nDone\nliteral\nlet value = 1")
+            expectText("  let value = 42\n  next\n")
         }
 
         func testStrikeShortcutUndoAndOrdinaryContinuation() {

@@ -19,6 +19,9 @@ context:
   design:
     source:
       entry: DESIGN.md
+  native-design-rules:
+    source:
+      entry: .agents/rules/apple-native-design.md
   verification:
     source:
       entry: docs/verification.md
@@ -26,9 +29,6 @@ context:
     source:
       entry: docs/development.md
 skills:
-  apple-design:
-    source:
-      entry: .agents/skills/apple-design
   visual-design:
     source:
       entry: .agents/skills/high-end-visual-design
@@ -42,15 +42,14 @@ nodes:
         description: 范围、方案、验收场景与待确认决策；复杂任务另发布 Spec Export。
   design-review:
     kind: agent
-    skill: [apple-design, visual-design]
-    description: 审核原生界面或文档样式；先读 DESIGN 的 Web skill 适配边界，再基于实际 App 提出改进。
+    skill: [visual-design]
+    description: 审核原生界面或文档样式；先读原生设计 rules 与 DESIGN 的视觉 skill 适配边界，再基于实际 App 提出改进。
     outputs:
       findings:
         type: string
         description: 场景、观察证据、预期、严重性和修复建议；区分视觉与输入行为。
   editor-implement:
     kind: agent
-    skill: [apple-design]
     description: 实现已收敛的 Swift 编辑器或应用改动，保护组合输入、选区、撤销与持久化，维护相关知识。
     outputs:
       changes:
@@ -82,7 +81,6 @@ nodes:
     command: xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build
   interaction-review:
     kind: agent
-    skill: [apple-design]
     description: UI 或输入行为变化后在实际 App 执行受影响操作；依据验证清单记录证据和未测试平台。
     outputs:
       verification:

@@ -14,7 +14,7 @@
 | `Sources/Weave/App/RecordGalleryLayout.swift` | 摘要高度缓存、最短列几何与可见区域索引 |
 | `Sources/Weave/App/WorkspaceView.swift` | 平台入口、记录卡片、记录编辑器及格式菜单 |
 | `Sources/Weave/App/MobileWorkspaceView.swift` | iOS/iPadOS 自适应双栏、分类选择、卡片与编辑导航栈、长按整理与移动分类 sheet |
-| `Sources/Weave/App/MacWorkspaceView.swift` | Mac 综合侧栏、分类/搜索、右侧浏览与编辑、窗口级导航与新建命令上下文 |
+| `Sources/Weave/App/MacWorkspaceView.swift` | Mac 底板功能栏、圆角卡片内的笔记列表/内容原生分栏、编辑与窗口级新建命令上下文 |
 | `Sources/Weave/Editor/Native/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、选区、输入事件和平台交互 |
 | `Sources/Weave/Editor/Features/EditorFeatureRegistry.swift` | 不可变输入上下文、feature 协议、语义命令与优先级 registry |
 | `Sources/Weave/Editor/Features/StandardEditorFeatures.swift` | quote、task/list、code block、inline 和 Markdown shortcut 等内置输入 feature |
@@ -57,7 +57,7 @@
 
 正文选区同时写入应用自有 Codable 格式、系统 RTF 和纯文本；同一应用内粘贴优先恢复引用、Todo、标题和行内强调等完整语义，跨应用则使用标准 RTF 或纯文本。表格的纯文本回退为 Markdown，粘贴时重建表格和代码块 ID，避免两个副本共用输入视图；代码的纯文本回退保留原文字面量。外部纯文本粘贴在解析后存在已支持 Markdown 语义时复用同一插入、撤销和发布路径；普通文本及外部 RTF/HTML 回退原生粘贴，代码上下文不解析 Markdown。单元格内部编辑继续使用平台剪贴板。
 
-稳定 UUID 在创建时生成；存储数组保持创建顺序，Mac 与移动端浏览视图均按最后编辑时间排序。分类操作不修改编辑时间。各窗口独立持有导航状态，新建命令作用于当前窗口分类。Mac 启动进入浏览列表；紧凑移动端从分类导航开始。移动端以一个 NavigationSplitView 和 detail NavigationStack 适配窗口尺寸，UUID 路径驱动编辑页，不在横竖屏切换时创建另一套编辑器。存储由应用实例持有，Observation 驱动 UI。修改先立即进入主线程内存状态，再由串行 actor 合并旧快照并在主线程外编码、原子写入 Application Support 下 `Weave/notes.json`；场景离开 active 时等待当前快照写完。实际目录受沙箱和启动方式影响。
+稳定 UUID 在创建时生成；存储数组保持创建顺序，Mac 与移动端浏览视图均按最后编辑时间排序。分类操作不修改编辑时间。各窗口独立持有导航状态，Mac 新建命令作用于当前窗口且不指定分类，移动端沿用当前分类。Mac 启动进入浏览列表；紧凑移动端从分类导航开始。移动端以一个 NavigationSplitView 和 detail NavigationStack 适配窗口尺寸，UUID 路径驱动编辑页，不在横竖屏切换时创建另一套编辑器。存储由应用实例持有，Observation 驱动 UI。修改先立即进入主线程内存状态，再由串行 actor 合并旧快照并在主线程外编码、原子写入 Application Support 下 `Weave/notes.json`；场景离开 active 时等待当前快照写完。实际目录受沙箱和启动方式影响。
 
 记录的 `folderID` 是记录级字段，不属于 `NoteAttributeScope`；旧记录缺字段时默认未分类。`NoteFolder` 独立保存空分类。`notes.json` 当前以 `version: 1 / folders / notes` 单个原子快照存储；读取兼容旧记录数组，首次实际修改才写新版。未知版本、缺字段、重复身份、空分类名和悬空分类引用均禁止覆盖原文件。旧版本 App 不支持新版容器，不应交替写同一目录。
 
@@ -98,3 +98,5 @@
 编辑页通过 `@State ToastPresenter` 持有短暂反馈；原生编辑器向 `onToast` 回调传递消息，代码块格式化错误和剪贴板写入失败共享该出口。Toast 不访问文本存储、不操作焦点、不保存到笔记。每条消息具有独立 ID，替换后重建卡片并取消旧任务；关闭操作核对 ID，避免旧计时器误关新提示。格式化错误保留详细诊断供用户主动展开。
 
 浮层光标：Mac Toast 按钮通过非拦截的 `PointingHandRegion` 声明实际点击热区；原生 `ReadingMacTextView.cursorUpdate` 先检查同窗口的可见浮层区域，避免正文 tracking 事件用 I 形光标覆盖按钮手型。区域弱引用管理，隐藏、移除和不同窗口不参与命中。
+
+Mac 精简工作区不再持有分类、搜索与导入状态；左栏直接绑定当前笔记 ID，显示全部记录。共享 NoteEditorView 只在 iOS 构建顶部格式/Markdown 菜单、字符统计与格式栏；Mac 保留标题、原生正文、链接编辑和保存错误反馈。分类持久化模型保留，用于已有数据兼容和移动端，不因移除 Mac 入口清理数据。

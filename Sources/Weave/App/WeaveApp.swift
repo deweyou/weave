@@ -53,6 +53,7 @@ struct WeaveApp: App {
                 }
         }
         #if os(macOS)
+            .windowStyle(.hiddenTitleBar)
             .defaultSize(width: 1000, height: 720)
             .commands {
                 CommandGroup(replacing: .newItem) {
