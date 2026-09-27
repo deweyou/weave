@@ -44,6 +44,69 @@ final class WeaveUITests: XCTestCase {
         }
     }
 
+    func testLargeGalleryScrollPerformance() {
+        app.terminate()
+        app.launchEnvironment["WEAVE_UI_TEST_GALLERY_COUNT"] = "1000"
+        app.launch()
+        #if os(macOS)
+            app.activate()
+            let gallery = app.scrollViews["record-gallery"]
+        #else
+            app.buttons["全部记录"].firstMatch.tap()
+            let gallery = app.collectionViews["record-gallery"]
+        #endif
+        XCTAssertTrue(gallery.waitForExistence(timeout: 15))
+        #if os(macOS)
+            XCTAssertTrue(recordCard(titled: "Gallery 0000").waitForExistence(timeout: 10))
+        #else
+            XCTAssertTrue(app.staticTexts["Gallery 0000"].waitForExistence(timeout: 10))
+        #endif
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+        measure(metrics: [XCTClockMetric(), XCTMemoryMetric(application: app), XCTCPUMetric(application: app)], options: options) {
+            for _ in 0..<5 {
+                #if os(macOS)
+                    gallery.scroll(byDeltaX: 0, deltaY: -600)
+                #else
+                    gallery.swipeUp(velocity: .fast)
+                #endif
+            }
+            for _ in 0..<5 {
+                #if os(macOS)
+                    gallery.scroll(byDeltaX: 0, deltaY: 600)
+                #else
+                    gallery.swipeDown(velocity: .fast)
+                #endif
+            }
+        }
+        XCTAssertTrue(gallery.exists)
+        #if os(macOS)
+            gallery.scroll(byDeltaX: 0, deltaY: -900)
+        #else
+            gallery.swipeUp()
+        #endif
+        let cards = gallery.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "note-row-"))
+        guard let card = cards.allElementsBoundByIndex.first(where: { $0.isHittable && $0.frame.minY >= gallery.frame.minY + 20 }) else {
+            return XCTFail("Expected an accessible, visible card after scrolling")
+        }
+        let identifier = card.identifier
+        let originalY = card.frame.minY
+        #if os(macOS)
+            card.click()
+        #else
+            card.tap()
+        #endif
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        #if os(macOS)
+            app.buttons["back-to-notes"].click()
+        #else
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        #endif
+        let restored = app.buttons[identifier]
+        XCTAssertTrue(restored.waitForExistence(timeout: 5))
+        XCTAssertEqual(restored.frame.minY, originalY, accuracy: 4, "Returning to the gallery must preserve the viewport")
+    }
+
     private var editor: XCUIElement { app.textViews["note-editor"] }
 
     private func newNote() {
@@ -55,9 +118,17 @@ final class WeaveUITests: XCTestCase {
             let button = app.buttons["new-note"]
         #endif
         XCTAssertTrue(button.waitForExistence(timeout: 10))
-        button.tap()
+        #if os(macOS)
+            button.click()
+        #else
+            button.tap()
+        #endif
         XCTAssertTrue(editor.waitForExistence(timeout: 10))
-        editor.tap()
+        #if os(macOS)
+            editor.click()
+        #else
+            editor.tap()
+        #endif
     }
 
     private func expectText(_ text: String) {
@@ -75,32 +146,32 @@ final class WeaveUITests: XCTestCase {
 
         func testMacRecordGalleryAndReturn() {
             newNote()
-            app.textFields["note-title"].tap()
+            app.textFields["note-title"].click()
             app.textFields["note-title"].typeText("Gallery record\n")
             editor.typeText("A quick thought for the gallery")
-            app.buttons["back-to-notes"].tap()
+            app.buttons["back-to-notes"].click()
             XCTAssertTrue(app.scrollViews["record-gallery"].waitForExistence(timeout: 5))
             let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "note-row-")).firstMatch
             XCTAssertTrue(card.waitForExistence(timeout: 5))
-            card.tap()
+            card.click()
             expectText("A quick thought for the gallery")
-            app.buttons["back-to-notes"].tap()
+            app.buttons["back-to-notes"].click()
             let search = app.searchFields.firstMatch
-            search.tap()
+            search.click()
             search.typeText("thought")
             XCTAssertTrue(card.exists)
             search.typeText(" missing")
             XCTAssertFalse(card.exists)
-            app.staticTexts["workspace-notes"].firstMatch.tap()
+            app.staticTexts["全部记录"].firstMatch.click()
             XCTAssertTrue(card.waitForExistence(timeout: 5))
         }
 
         func testMacLibraryFoldersAndSearch() {
-            app.buttons["new-folder"].tap()
+            app.buttons["new-folder"].click()
             let field = app.textFields["分类名称"]
             XCTAssertTrue(field.waitForExistence(timeout: 5))
             field.typeText("Layout category")
-            app.sheets.buttons["保存"].tap()
+            field.typeText("\n")
             let createdFolder = app.descendants(matching: .any).matching(
                 NSPredicate(format: "identifier BEGINSWITH %@", "folder-row-")
             ).firstMatch
@@ -108,40 +179,40 @@ final class WeaveUITests: XCTestCase {
             let folderIdentifier = createdFolder.identifier
             newNote()
             let title = app.textFields["note-title"]
-            title.tap()
+            title.click()
             title.typeText("Layout note")
             title.typeText("\n")
             editor.typeText("Content search token")
-            app.buttons["back-to-notes"].tap()
+            app.buttons["back-to-notes"].click()
             XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
-            app.staticTexts["全部记录"].firstMatch.tap()
+            app.staticTexts["全部记录"].firstMatch.click()
             XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
             XCTAssertTrue(app.scrollViews["record-gallery"].exists)
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5))
-            search.tap()
+            search.click()
             search.typeText("search token")
             XCTAssertTrue(recordCard(titled: "Layout note").exists)
             search.typeText(" missing")
             XCTAssertFalse(recordCard(titled: "Layout note").exists)
-            app.staticTexts["全部记录"].firstMatch.tap()
+            app.staticTexts["全部记录"].firstMatch.click()
             XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
-            recordCard(titled: "Layout note").tap()
-            app.menuButtons["organize-note"].tap()
-            app.menuItems["移动到分类"].tap()
-            app.menuItems["未分类"].tap()
-            app.buttons["back-to-notes"].tap()
-            app.staticTexts["未分类"].firstMatch.tap()
+            recordCard(titled: "Layout note").click()
+            app.menuButtons["organize-note"].click()
+            app.menuItems["移动到分类"].click()
+            app.menuItems["未分类"].click()
+            app.buttons["back-to-notes"].click()
+            app.staticTexts["未分类"].firstMatch.click()
             XCTAssertTrue(recordCard(titled: "Layout note").waitForExistence(timeout: 5))
             app.terminate()
             app.launch()
-            app.staticTexts["全部记录"].firstMatch.tap()
-            recordCard(titled: "Layout note").tap()
+            app.staticTexts["全部记录"].firstMatch.click()
+            recordCard(titled: "Layout note").click()
             expectText("Content search token")
-            app.buttons["back-to-notes"].tap()
+            app.buttons["back-to-notes"].click()
             let restoredFolder = app.descendants(matching: .any).matching(identifier: folderIdentifier).firstMatch
             XCTAssertTrue(restoredFolder.waitForExistence(timeout: 5))
-            restoredFolder.tap()
+            restoredFolder.click()
             XCTAssertTrue(app.buttons["empty-new-note"].waitForExistence(timeout: 5))
         }
 

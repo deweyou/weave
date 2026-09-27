@@ -23,7 +23,7 @@
         @State private var showsFolderEditor = false
         @State private var editingFolderID: UUID?
         @State private var folderName = ""
-        @State private var galleryOffset: CGFloat = 0
+        @State private var galleryScroll = RecordGalleryScrollState()
         @State private var movingNote: Note?
         @State private var showsImport = false
         @State private var importFromSidebar = false
@@ -81,7 +81,7 @@
                 }
             }
             .navigationSplitViewStyle(.balanced)
-            .onChange(of: query) { _, _ in galleryOffset = 0 }
+            .onChange(of: query) { _, _ in galleryScroll.reset() }
             .alert(editingFolderID == nil ? "新建分类" : "重命名分类", isPresented: $showsFolderEditor) {
                 TextField("分类名称", text: $folderName).accessibilityIdentifier("folder-name")
                 Button("取消", role: .cancel) {}
@@ -212,8 +212,10 @@
             } else if library == .tasks {
                 ContentUnavailableView("任务稍后推出", systemImage: "checklist", description: Text("独立任务和任务分类正在规划中。你仍可以在记录中使用待办列表。"))
             } else {
-                RecordGallery(notes: notes, scrollOffset: $galleryOffset) { note in
-                    NavigationLink(value: note.id) {
+                RecordGallery(notes: notes, scrollState: galleryScroll) { note in
+                    Button {
+                        path.append(note.id)
+                    } label: {
                         RecordCard(note: note)
                     }
                     .buttonStyle(.plain)
@@ -282,7 +284,7 @@
 
         private func select(_ destination: MobileLibrary?) {
             guard library != destination else { return }
-            galleryOffset = 0
+            galleryScroll.reset()
             library = destination
             path = []
             query = ""

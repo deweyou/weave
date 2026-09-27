@@ -51,7 +51,7 @@
         @State private var showsFolderEditor = false
         @State private var editingFolderID: UUID?
         @State private var folderName = ""
-        @State private var galleryOffset: CGFloat = 0
+        @State private var galleryScroll = RecordGalleryScrollState()
 
         private var title: String {
             switch navigation.location {
@@ -99,8 +99,8 @@
             }
             .frame(minWidth: 720, minHeight: 460)
             .focusedSceneValue(\.workspaceNavigation, navigation)
-            .onChange(of: navigation.location) { _, _ in galleryOffset = 0 }
-            .onChange(of: navigation.query) { _, _ in galleryOffset = 0 }
+            .onChange(of: navigation.location) { _, _ in galleryScroll.reset() }
+            .onChange(of: navigation.query) { _, _ in galleryScroll.reset() }
             .fileImporter(isPresented: $showsImport, allowedContentTypes: [MarkdownFile.contentType, .plainText]) { result in
                 do {
                     let url = try result.get()
@@ -281,7 +281,7 @@
                     Text("\(notes.count) 条记录").foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 32).padding(.top, 24).padding(.bottom, 20)
-                RecordGallery(notes: notes, scrollOffset: $galleryOffset) { note in
+                RecordGallery(notes: notes, scrollState: galleryScroll) { note in
                     Button {
                         navigation.editorID = note.id
                     } label: {
@@ -289,6 +289,9 @@
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("note-row-\(note.id)")
+                    .accessibilityLabel(note.displayTitle)
+                    .accessibilityValue(note.preview)
+                    .pointerStyle(.link)
                     .contextMenu { noteActions(note) }
                 }
                 .overlay {
