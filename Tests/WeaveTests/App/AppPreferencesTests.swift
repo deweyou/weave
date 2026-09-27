@@ -43,6 +43,7 @@ struct AppPreferencesTests {
 
     @Test(arguments: AppPreferences.Language.allCases)
     func bundledTranslationsAndInterpolation(language: AppPreferences.Language) {
+        #expect(L10n.bundle(for: language).bundleURL.lastPathComponent.lowercased() == "\(language.rawValue.lowercased()).lproj")
         #expect(L10n.string("设置", language: language) == (language == .chinese ? "设置" : "Settings"))
         let column = 3
         #expect(

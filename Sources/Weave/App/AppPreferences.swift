@@ -77,8 +77,13 @@ enum L10n {
     }()
 
     static func bundle(for language: AppPreferences.Language) -> Bundle {
-        guard let path = resources.path(forResource: language.rawValue, ofType: "lproj"),
-            let bundle = Bundle(path: path)
+        // SwiftPM can normalize localization directory names to lowercase.
+        // Resolve the actual entry instead of falling back to the host's preferred language.
+        guard
+            let localization = resources.localizations.first(where: {
+                $0.caseInsensitiveCompare(language.rawValue) == .orderedSame
+            }), let url = resources.resourceURL?.appendingPathComponent("\(localization).lproj"),
+            let bundle = Bundle(url: url)
         else { return resources }
         return bundle
     }

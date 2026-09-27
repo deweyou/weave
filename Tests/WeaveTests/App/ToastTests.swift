@@ -50,6 +50,6 @@ struct ToastTests {
         #expect(messages.count == 2)
         #expect(messages.last?.title == L10n.string("格式化失败"))
         #expect(messages.last?.details?.contains("Unexpected token (2:3)") == true)
-        #expect(messages.last?.message.contains("原文已保留") == true)
+        #expect(messages.last?.message == L10n.string("请检查代码语法，原文已保留。"))
     }
 }
