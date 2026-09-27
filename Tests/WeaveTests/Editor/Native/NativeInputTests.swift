@@ -697,7 +697,7 @@
             }
 
             let action = try #require(view.accessibilityCustomActions()?.first)
-            #expect(action.name == L10n.string("将“\("Accessible task")”标记为已完成"))
+            #expect(action.name == L10n.markComplete("Accessible task"))
             #expect(action.handler?() == true)
             #expect(toggledMarker == 0)
         }

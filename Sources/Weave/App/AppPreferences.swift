@@ -91,4 +91,77 @@ enum L10n {
     static func string(_ value: String.LocalizationValue, language: AppPreferences.Language = language) -> String {
         String(localized: value, bundle: bundle(for: language), locale: language.locale)
     }
+
+    // Explicit keys stay stable; default values supply typed interpolation and missing-resource fallback.
+    static func mixedFormat(_ title: String, language: AppPreferences.Language = language) -> String {
+        String(localized: "format.mixed", defaultValue: "\(title)（混合）", bundle: bundle(for: language), locale: language.locale)
+    }
+
+    static func characterCount(_ count: Int, language: AppPreferences.Language = language) -> String {
+        String(localized: "note.character_count", defaultValue: "\(count) 字符", bundle: bundle(for: language), locale: language.locale)
+    }
+
+    static func noteCount(_ count: Int, language: AppPreferences.Language = language) -> String {
+        String(localized: "note.count", defaultValue: "\(count) 条记录", bundle: bundle(for: language), locale: language.locale)
+    }
+
+    static func originalPreserved(_ details: String, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "storage.original_preserved", defaultValue: "原文件已保留。\n\(details)", bundle: bundle(for: language),
+            locale: language.locale)
+    }
+
+    static func markComplete(_ content: String, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "checklist.mark_complete", defaultValue: "将“\(content)”标记为已完成", bundle: bundle(for: language),
+            locale: language.locale)
+    }
+
+    static func markIncomplete(_ content: String, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "checklist.mark_incomplete", defaultValue: "将“\(content)”标记为未完成", bundle: bundle(for: language),
+            locale: language.locale)
+    }
+
+    static func unsaved(_ details: String, language: AppPreferences.Language = language) -> String {
+        String(localized: "storage.unsaved", defaultValue: "尚未保存：\(details)", bundle: bundle(for: language), locale: language.locale)
+    }
+
+    static func searchNotes(_ title: String, language: AppPreferences.Language = language) -> String {
+        String(localized: "note.search", defaultValue: "搜索\(title)", bundle: bundle(for: language), locale: language.locale)
+    }
+
+    static func saveFailed(_ details: String, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "storage.save_failed", defaultValue: "无法保存记录。内容仍保留在当前窗口，请重试。\n\(details)", bundle: bundle(for: language),
+            locale: language.locale)
+    }
+
+    static func formatFailed(_ details: String, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "code.format.failed_details", defaultValue: "无法格式化，原文已保留。\n\(details)", bundle: bundle(for: language),
+            locale: language.locale)
+    }
+
+    static func loadFailed(_ details: String, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "storage.load_failed.description", defaultValue: "无法读取记录，已暂停编辑以保护原始内容。请恢复文件后重新读取。\n\(details)",
+            bundle: bundle(for: language), locale: language.locale)
+    }
+
+    static func heading(_ level: Int, language: AppPreferences.Language = language) -> String {
+        String(localized: "format.heading", defaultValue: "标题 \(level)", bundle: bundle(for: language), locale: language.locale)
+    }
+
+    static func tableHeader(_ column: Int, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "table.header.accessibility_label", defaultValue: "第 \(column) 列表头", bundle: bundle(for: language),
+            locale: language.locale)
+    }
+
+    static func tableCell(_ row: Int, _ column: Int, language: AppPreferences.Language = language) -> String {
+        String(
+            localized: "table.cell.accessibility_label", defaultValue: "第 \(row) 行第 \(column) 列", bundle: bundle(for: language),
+            locale: language.locale)
+    }
 }

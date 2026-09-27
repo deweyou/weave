@@ -100,10 +100,12 @@
             .containerShape(.rect(cornerRadius: 16))
             .overlay(alignment: .top) {
                 HStack(spacing: 4) {
-                    historyButton("后退", symbol: "chevron.left", enabled: navigation.canGoBack, action: navigation.goBack)
+                    historyButton("navigation.back", symbol: "chevron.left", enabled: navigation.canGoBack, action: navigation.goBack)
                         .accessibilityIdentifier("navigation-back")
-                    historyButton("前进", symbol: "chevron.right", enabled: navigation.canGoForward, action: navigation.goForward)
-                        .accessibilityIdentifier("navigation-forward")
+                    historyButton(
+                        "navigation.forward", symbol: "chevron.right", enabled: navigation.canGoForward, action: navigation.goForward
+                    )
+                    .accessibilityIdentifier("navigation-forward")
                     Spacer(minLength: 0)
                     if navigation.destination == .documents { newNoteButton }
                 }
@@ -117,9 +119,9 @@
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if navigation.editorID == nil, let error = store.saveError {
                     HStack {
-                        Label("尚未保存：\(error)", systemImage: "exclamationmark.triangle")
+                        Label(L10n.unsaved(error), systemImage: "exclamationmark.triangle")
                         Spacer()
-                        Button("重试") { store.retrySave() }
+                        Button("common.retry") { store.retrySave() }
                     }.padding().background(.bar)
                 }
             }
@@ -153,41 +155,41 @@
             }
             .buttonStyle(.borderless)
             .tint(.primary)
-            .accessibilityLabel("新建记录")
+            .accessibilityLabel("note.create")
             .accessibilityIdentifier("new-note")
-            .help("新建记录 ⌘N")
+            .help("note.create.help")
             .disabled(store.loadError != nil)
             .pointerStyle(store.loadError == nil ? .link : .default)
         }
 
         private var functionRail: some View {
             VStack(spacing: 6) {
-                destinationButton("首页", symbol: "house", isSelected: navigation.destination == .home) {
+                destinationButton("navigation.home", symbol: "house", isSelected: navigation.destination == .home) {
                     navigation.select(.home)
                 }
                 .accessibilityIdentifier("workspace-home")
-                destinationButton("文档", symbol: "doc.text", isSelected: navigation.destination == .documents) {
+                destinationButton("navigation.documents", symbol: "doc.text", isSelected: navigation.destination == .documents) {
                     navigation.select(.documents)
                 }
                 .accessibilityIdentifier("workspace-documents")
-                destinationButton("任务", symbol: "checkmark.square", isSelected: navigation.destination == .tasks) {
+                destinationButton("navigation.tasks", symbol: "checkmark.square", isSelected: navigation.destination == .tasks) {
                     navigation.select(.tasks)
                 }
                 .accessibilityIdentifier("workspace-tasks")
-                .help("任务 · 稍后推出")
+                .help("tasks.coming_soon.help")
                 Spacer(minLength: 0)
-                destinationButton("设置", symbol: "gearshape", isSelected: navigation.destination == .settings) {
+                destinationButton("settings.title", symbol: "gearshape", isSelected: navigation.destination == .settings) {
                     navigation.select(.settings)
                 }
                 .accessibilityIdentifier("workspace-settings")
-                .help("设置")
+                .help("settings.title")
             }
             .padding(.top, 14)
             .padding(.bottom, 12)
             .frame(width: 48)
             .frame(maxHeight: .infinity)
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("功能导航")
+            .accessibilityLabel("navigation.accessibility_label")
         }
 
         private func destinationButton(
@@ -220,7 +222,7 @@
                     AppSettingsView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if navigation.destination == .home {
-                    ContentUnavailableView("首页", systemImage: "house", description: Text("从文档开始记录。"))
+                    ContentUnavailableView("navigation.home", systemImage: "house", description: Text("home.empty.description"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     HSplitView {
@@ -298,15 +300,17 @@
         @ViewBuilder private var detail: some View {
             if let error = store.loadError {
                 ContentUnavailableView {
-                    Label("无法读取记录", systemImage: "exclamationmark.triangle")
+                    Label("storage.load_failed.title", systemImage: "exclamationmark.triangle")
                 } description: {
-                    Text("原文件已保留。\n\(error)")
+                    Text(L10n.originalPreserved(error))
                 } actions: {
-                    Button("重新读取") { store.reload() }
+                    Button("storage.reload") { store.reload() }
                 }
             } else if navigation.destination == .tasks {
-                ContentUnavailableView("任务稍后推出", systemImage: "checklist", description: Text("独立任务和任务分类正在规划中。你仍可以在记录中使用待办列表。"))
-                    .navigationTitle(L10n.string("任务"))
+                ContentUnavailableView(
+                    "tasks.coming_soon.title", systemImage: "checklist", description: Text("tasks.coming_soon.description")
+                )
+                .navigationTitle(L10n.string("navigation.tasks"))
             } else if let note = store.notes.first(where: { $0.id == navigation.editorID }) {
                 NoteEditorView(note: note, store: store, saveError: store.saveError, retrySave: store.retrySave)
                     .id(note.id)
@@ -320,7 +324,7 @@
                 HStack(alignment: .center, spacing: 12) {
                     Text(verbatim: "Inbox").font(.largeTitle.bold())
                     Spacer()
-                    Text("\(notes.count) 条记录").foregroundStyle(.secondary)
+                    Text(L10n.noteCount(notes.count)).foregroundStyle(.secondary)
 
                 }
                 .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 4)
@@ -339,9 +343,9 @@
                 .overlay {
                     if notes.isEmpty {
                         ContentUnavailableView {
-                            Label("从一条记录开始", systemImage: "note.text")
+                            Label("note.empty.title", systemImage: "note.text")
                         } description: {
-                            Text("写下想法。")
+                            Text("note.empty.prompt")
                         }
                     }
                 }

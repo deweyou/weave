@@ -186,7 +186,7 @@ final class NoteStore {
                 // A newer snapshot owns the pending save.
             } catch {
                 guard let self, self.saveRevision == revision else { return }
-                self.saveError = L10n.string("无法保存记录。内容仍保留在当前窗口，请重试。\n\(error.localizedDescription)")
+                self.saveError = L10n.saveFailed(error.localizedDescription)
             }
         }
     }
@@ -209,14 +209,14 @@ final class NoteStore {
             guard Set(library.notes.map(\.id)).count == library.notes.count,
                 Set(library.folders.map(\.id)).count == library.folders.count
             else {
-                loadError = L10n.string("记录文件包含重复标识，已暂停编辑以保护原始内容。请恢复文件后重新读取。")
+                loadError = L10n.string("storage.duplicate_identifiers")
                 return
             }
             let folderIDs = Set(library.folders.map(\.id))
             guard library.folders.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
                 library.notes.allSatisfy({ note in note.folderID.map { folderIDs.contains($0) } ?? true })
             else {
-                loadError = L10n.string("记录分类无效，已暂停编辑以保护原始内容。请恢复文件后重新读取。")
+                loadError = L10n.string("storage.invalid_folders")
                 return
             }
             notes = library.notes
@@ -227,7 +227,7 @@ final class NoteStore {
             loadError = nil
             saveError = nil
         } catch {
-            loadError = L10n.string("无法读取记录，已暂停编辑以保护原始内容。请恢复文件后重新读取。\n\(error.localizedDescription)")
+            loadError = L10n.loadFailed(error.localizedDescription)
         }
     }
 }

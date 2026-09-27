@@ -61,12 +61,12 @@ struct WeaveApp: App {
             .defaultSize(width: 1000, height: 720)
             .commands {
                 CommandGroup(replacing: .appSettings) {
-                    Button(L10n.string("设置…")) { navigation?.select(.settings) }
+                    Button(L10n.string("settings.open")) { navigation?.select(.settings) }
                     .keyboardShortcut(",", modifiers: .command)
                     .disabled(navigation == nil)
                 }
                 CommandGroup(replacing: .newItem) {
-                    Button(L10n.string("新建记录"), systemImage: "square.and.pencil") {
+                    Button(L10n.string("note.create"), systemImage: "square.and.pencil") {
                         navigation?.createNote(in: store)
                     }
                     .keyboardShortcut("n", modifiers: .command)
