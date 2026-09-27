@@ -109,9 +109,9 @@ enum CodeCopyStatus {
 
     var label: String {
         switch self {
-        case .ready: L10n.string("复制代码")
-        case .copied: L10n.string("已复制代码")
-        case .failed: L10n.string("复制失败，点击重试")
+        case .ready: L10n.string("code.copy")
+        case .copied: L10n.string("code.copied")
+        case .failed: L10n.string("code.copy_failed.retry")
         }
     }
 
@@ -163,19 +163,19 @@ final class CodeHeaderModel {
         copyStatus = writeClipboard(literal) ? .copied : .failed
         copyAttempt += 1
         if copyStatus == .failed {
-            onToast(ToastMessage(title: L10n.string("复制失败"), message: L10n.string("未能写入剪贴板，请重试。")))
+            onToast(ToastMessage(title: L10n.string("clipboard.copy_failed"), message: L10n.string("clipboard.write_failed")))
         }
     }
 
     func reportFormatFailure(_ error: Error) {
         let message: String
         switch error {
-        case CodeFormatting.Failure.changed: message = L10n.string("代码或语言已修改，请重新格式化。")
-        case CodeFormatting.Failure.tooLarge: message = L10n.string("代码过长，暂不支持格式化。")
-        case CodeFormatting.Failure.syntax: message = L10n.string("请检查代码语法，原文已保留。")
-        default: message = L10n.string("未能完成格式化，原文已保留。")
+        case CodeFormatting.Failure.changed: message = L10n.string("code.format.changed")
+        case CodeFormatting.Failure.tooLarge: message = L10n.string("code.format.too_long")
+        case CodeFormatting.Failure.syntax: message = L10n.string("code.format.syntax_preserved")
+        default: message = L10n.string("code.format.failed_preserved")
         }
-        onToast(ToastMessage(title: L10n.string("格式化失败"), message: message, details: error.localizedDescription))
+        onToast(ToastMessage(title: L10n.string("code.format.failed_title"), message: message, details: error.localizedDescription))
     }
 
     func resetCopyFeedback() { copyStatus = .ready }
@@ -201,7 +201,7 @@ struct CodeHeaderView: View {
                 .contentShape(Rectangle())
             }
             .menuIndicator(.hidden)
-            .accessibilityLabel("代码语言")
+            .accessibilityLabel("code.language")
             .accessibilityIdentifier("code-language")
             #if os(macOS)
                 .pointerStyle(.link)
@@ -219,8 +219,8 @@ struct CodeHeaderView: View {
                         .frame(width: 28, height: CodeLayoutManager.headerHeight, alignment: .topTrailing)
                         .contentShape(Rectangle())
                 }
-                .help(model.isExpanded ? L10n.string("收起") : L10n.string("展开全部"))
-                .accessibilityLabel(model.isExpanded ? L10n.string("收起") : L10n.string("展开全部"))
+                .help(model.isExpanded ? L10n.string("code.collapse") : L10n.string("code.expand"))
+                .accessibilityLabel(model.isExpanded ? L10n.string("code.collapse") : L10n.string("code.expand"))
                 .accessibilityIdentifier("code-expand")
                 #if os(macOS)
                     .pointerStyle(.link)
@@ -238,9 +238,9 @@ struct CodeHeaderView: View {
                     .frame(width: 28, height: CodeLayoutManager.headerHeight, alignment: .topTrailing)
                     .contentShape(Rectangle())
             }
-            .help(model.wrapsCode ? L10n.string("关闭自动换行") : L10n.string("开启自动换行"))
-            .accessibilityLabel("自动换行")
-            .accessibilityValue(model.wrapsCode ? L10n.string("开启") : L10n.string("关闭"))
+            .help(model.wrapsCode ? L10n.string("code.wrap.disable") : L10n.string("code.wrap.enable"))
+            .accessibilityLabel("code.wrap")
+            .accessibilityValue(model.wrapsCode ? L10n.string("common.on") : L10n.string("common.off"))
             .accessibilityIdentifier("code-wrap")
             #if os(macOS)
                 .pointerStyle(.link)
@@ -258,8 +258,8 @@ struct CodeHeaderView: View {
                         .contentShape(Rectangle())
                 }
                 .disabled(model.isFormatting)
-                .help(model.isFormatting ? L10n.string("正在格式化…") : L10n.string("格式化代码"))
-                .accessibilityLabel("格式化代码")
+                .help(model.isFormatting ? L10n.string("code.format.progress") : L10n.string("code.format"))
+                .accessibilityLabel("code.format")
                 .accessibilityIdentifier("format-code")
                 #if os(macOS)
                     .pointerStyle(.link)

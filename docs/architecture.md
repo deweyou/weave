@@ -108,6 +108,6 @@ Mac 精简工作区不再持有分类、搜索与导入状态；左栏直接绑�
 
 `preferredColorScheme` 在窗口内容根部应用主题，跟随系统时传 nil。活动语言在进程生命周期内固定，语言选择只修改下次启动偏好，避免为了切换语言重建编辑器；正式应用同时写入应用域的 `AppleLanguages`，供系统菜单在重启时采用。隔离测试 suite 不更改正式应用域的系统菜单语言。
 
-`Resources/zh-Hans.lproj` 和 `Resources/en.lproj` 维护同键 Localizable.strings，并注册到 Xcode 与 Swift Package。SwiftUI 静态文案使用本地化字面量与 locale 环境；原生菜单、错误和动态构造文案经 `L10n.string` 读取活动语言资源。独立宿主的表格和代码操作栏显式注入 locale。用户内容不作为本地化 key；带参数的提示整体翻译，避免拼接句子。添加文案时同步两份资源并检查参数类型与顺序。
+`Resources/zh-Hans.lproj` 和 `Resources/en.lproj` 维护同键 Localizable.strings，并注册到 Xcode 与 Swift Package。所有资源键使用稳定的英文语义标识（如 `note.create`、`settings.title`），不以中英文显示文案作为 key。SwiftUI 静态文案直接传入语义 key 并使用 locale 环境；原生菜单和错误通过 `L10n.string` 读取活动语言资源。带参数文案集中在 `L10n` 的具名方法中，通过显式 key 和 `defaultValue` 的类型化插值解析；中文 defaultValue 仅提供参数及缺失资源时的回退，不是查询 key。字符数和记录数的 `.stringsdict` 使用相同语义 key，保留英文单复数规则。独立宿主的表格和代码操作栏显式注入 locale。用户内容不作为本地化 key；带参数的提示整体翻译，避免拼接句子。添加文案时同步两份资源并检查参数类型与顺序。
 
 MacWorkspaceNavigation 以页面和可选文档 UUID 为访问位置，通过 select/openNote/createNote 统一推进历史；后退与前进直接切换历史位置，避免再次入栈。历史属于窗口内存状态，不写入笔记存储。

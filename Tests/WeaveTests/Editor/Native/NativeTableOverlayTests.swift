@@ -16,7 +16,7 @@
             }
             model.copyCode()
             #expect(model.copyStatus == .failed)
-            #expect(model.copyStatus.label == L10n.string("复制失败，点击重试"))
+            #expect(model.copyStatus.label == L10n.string("code.copy_failed.retry"))
             let firstAttempt = model.copyAttempt
             model.copyCode()
             #expect(model.copyStatus == .copied)

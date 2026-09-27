@@ -223,7 +223,7 @@ struct NoteStoreTests {
         await restored.flushPendingSave()
         let untitled = try #require(NoteStore(directory: directory).notes.first)
         #expect(untitled.title.isEmpty)
-        #expect(untitled.displayTitle == L10n.string("未命名记录"))
+        #expect(untitled.displayTitle == L10n.string("note.untitled"))
         #expect(untitled.richText == body)
     }
 

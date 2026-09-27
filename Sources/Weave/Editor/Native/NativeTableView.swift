@@ -140,29 +140,29 @@ struct TableBlockView: View {
             Image(systemName: "tablecells")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Menu("表格") {
-                Button("在下方插入行") { insertRow() }
-                Button("在右侧插入列") {
+            Menu("table.title") {
+                Button("table.row.insert_below") { insertRow() }
+                Button("table.column.insert_right") {
                     let column = activeCell.column
                     model.change { $0.insertColumn(after: column) }
                     focusedCell = Cell(row: activeCell.row, column: column + 1)
                 }
                 Divider()
-                alignmentButton("左对齐", symbol: "text.alignleft", value: .left)
-                alignmentButton("居中", symbol: "text.aligncenter", value: .center)
-                alignmentButton("右对齐", symbol: "text.alignright", value: .right)
-                Button("在表格后继续输入") {
+                alignmentButton("format.align.left", symbol: "text.alignleft", value: .left)
+                alignmentButton("format.align.center", symbol: "text.aligncenter", value: .center)
+                alignmentButton("format.align.right", symbol: "text.alignright", value: .right)
+                Button("table.continue_typing") {
                     focusedCell = nil
                     model.onExit()
                 }
                 Divider()
-                Button("删除当前行", role: .destructive) {
+                Button("table.row.delete", role: .destructive) {
                     let row = activeCell.row
                     model.change { $0.removeRow(at: row) }
                     clampActiveCell()
                 }
                 .disabled(model.table.rows.count <= 1)
-                Button("删除当前列", role: .destructive) {
+                Button("table.column.delete", role: .destructive) {
                     let column = activeCell.column
                     model.change { $0.removeColumn(at: column) }
                     clampActiveCell()
@@ -171,13 +171,13 @@ struct TableBlockView: View {
             }
             .accessibilityIdentifier("table-actions")
             Menu {
-                alignmentButton("左对齐", symbol: "text.alignleft", value: .left)
-                alignmentButton("居中", symbol: "text.aligncenter", value: .center)
-                alignmentButton("右对齐", symbol: "text.alignright", value: .right)
+                alignmentButton("format.align.left", symbol: "text.alignleft", value: .left)
+                alignmentButton("format.align.center", symbol: "text.aligncenter", value: .center)
+                alignmentButton("format.align.right", symbol: "text.alignright", value: .right)
             } label: {
                 Image(systemName: alignmentSymbol)
             }
-            .accessibilityLabel("当前列对齐")
+            .accessibilityLabel("table.column.alignment")
             .accessibilityIdentifier("table-alignment")
             .opacity(focusedCell != nil || isHovering ? 1 : 0)
             .accessibilityHidden(focusedCell == nil && !isHovering)
@@ -188,8 +188,8 @@ struct TableBlockView: View {
             } label: {
                 Image(systemName: "arrow.down.to.line")
             }
-            .help("在表格后继续输入")
-            .accessibilityLabel("在表格后继续输入")
+            .help("table.continue_typing")
+            .accessibilityLabel("table.continue_typing")
             .accessibilityIdentifier("table-exit")
             .opacity(focusedCell != nil || isHovering ? 1 : 0)
             .accessibilityHidden(focusedCell == nil && !isHovering)
@@ -204,7 +204,7 @@ struct TableBlockView: View {
 
     private func cell(row: Int, column: Int) -> some View {
         TextField(
-            row == 0 ? L10n.string("表头") : "",
+            row == 0 ? L10n.string("table.header") : "",
             text: Binding(
                 get: {
                     guard model.table.rows.indices.contains(row), model.table.alignments.indices.contains(column) else { return "" }
@@ -221,7 +221,7 @@ struct TableBlockView: View {
         .multilineTextAlignment(textAlignment(column))
         .padding(.horizontal, 10)
         .focused($focusedCell, equals: Cell(row: row, column: column))
-        .accessibilityLabel(row == 0 ? L10n.string("第 \(column + 1) 列表头") : L10n.string("第 \(row + 1) 行第 \(column + 1) 列"))
+        .accessibilityLabel(row == 0 ? L10n.tableHeader(column + 1) : L10n.tableCell(row + 1, column + 1))
         .accessibilityIdentifier("table-cell-\(row)-\(column)")
         .onSubmit {
             if row + 1 < model.table.rows.count {

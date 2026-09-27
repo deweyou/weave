@@ -70,8 +70,8 @@ private struct ToastCard: View {
                             .contentShape(Rectangle())
                     }
                     .modifier(ToastButtonPointer())
-                    .help("查看详细原因")
-                    .accessibilityLabel("查看详细原因")
+                    .help("toast.show_details")
+                    .accessibilityLabel("toast.show_details")
                     .accessibilityIdentifier("toast-details")
                     .popover(isPresented: $showsDetails) {
                         ScrollView {
@@ -91,8 +91,8 @@ private struct ToastCard: View {
                         .contentShape(Rectangle())
                 }
                 .modifier(ToastButtonPointer())
-                .help("关闭提示")
-                .accessibilityLabel("关闭提示")
+                .help("toast.dismiss")
+                .accessibilityLabel("toast.dismiss")
                 .accessibilityIdentifier("toast-dismiss")
             }
             .buttonStyle(.plain)

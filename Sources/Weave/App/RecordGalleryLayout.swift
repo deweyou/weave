@@ -88,7 +88,7 @@ struct RecordCardPreview: Equatable {
         id = note.id
         title = note.displayTitle
         let text = note.text
-        summary = text.isEmpty ? L10n.string("暂无正文") : String(text.prefix(600))
+        summary = text.isEmpty ? L10n.string("note.body.empty") : String(text.prefix(600))
         updatedAt = note.updatedAt
     }
 }

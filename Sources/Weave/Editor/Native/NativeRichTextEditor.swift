@@ -310,7 +310,7 @@ struct NativeRichTextEditor {
             let start = shifted(before.location)
             let end = shifted(NSMaxRange(before))
             apply(text: next, selection: NSRange(location: start, length: max(0, end - start)), attributes: attributes)
-            view.undoManager?.setActionName(L10n.string("格式化代码"))
+            view.undoManager?.setActionName(L10n.string("code.format"))
         }
 
         private func exitTable(at index: Int) {
@@ -392,7 +392,7 @@ struct NativeRichTextEditor {
                 body[ParagraphStyleAttribute.self] = "body"
                 let attributes = NativeTextAttributes.native(body, context: parent.fontContext).attributes(at: 0, effectiveRange: nil)
                 apply(text: next, selection: NSRange(location: range.location, length: 0), attributes: attributes)
-                view.undoManager?.setActionName(L10n.string("剪切"))
+                view.undoManager?.setActionName(L10n.string("edit.cut"))
             }
             return true
         }
@@ -434,7 +434,7 @@ struct NativeRichTextEditor {
             body[ParagraphStyleAttribute.self] = "body"
             let attributes = NativeTextAttributes.native(body, context: parent.fontContext).attributes(at: 0, effectiveRange: nil)
             apply(text: next, selection: NSRange(location: range.location + inserted.length, length: 0), attributes: attributes)
-            view.undoManager?.setActionName(L10n.string("粘贴"))
+            view.undoManager?.setActionName(L10n.string("edit.paste"))
             return true
         }
 
@@ -456,7 +456,7 @@ struct NativeRichTextEditor {
             storage.addAttributes([.weaveTable: encoded, .attachment: TableTextAttachment(table: table)], range: target)
             isUpdating = false
             publish()
-            view.undoManager?.setActionName(L10n.string("编辑表格"))
+            view.undoManager?.setActionName(L10n.string("table.edit"))
         }
 
         func intercept(range: NSRange, replacement: String?) -> Bool {
@@ -559,7 +559,7 @@ struct NativeRichTextEditor {
                     text: NativeTextAttributes.native(value, context: parent.fontContext),
                     selection: after,
                     attributes: textView.typingAttributes)
-                textView.undoManager?.setActionName(L10n.string("代码缩进"))
+                textView.undoManager?.setActionName(L10n.string("code.indent"))
                 return
             }
             // A newly created empty code block exists only in typing attributes.
@@ -833,7 +833,7 @@ struct NativeRichTextEditor {
                     : context.selection,
                 attributes: originalAttributes)
             apply(text: updated, selection: after, attributes: nextAttributes)
-            textView.undoManager?.setActionName(L10n.string("Markdown 快捷输入"))
+            textView.undoManager?.setActionName(L10n.string("markdown.shortcut"))
         }
 
         func exitTrailingCode() -> Bool {
@@ -854,7 +854,7 @@ struct NativeRichTextEditor {
                 next.append(boundary)
             }
             apply(text: next, selection: NSRange(location: next.length, length: 0), attributes: attributes)
-            view.undoManager?.setActionName(L10n.string("退出代码块"))
+            view.undoManager?.setActionName(L10n.string("code.exit"))
             return true
         }
 
@@ -873,7 +873,7 @@ struct NativeRichTextEditor {
             registerUndo(
                 text: NSAttributedString(attributedString: storage), selection: currentSelection, attributes: view.typingAttributes)
             apply(text: NSAttributedString(attributedString: storage), selection: currentSelection, attributes: attributes)
-            view.undoManager?.setActionName(L10n.string("退出引用"))
+            view.undoManager?.setActionName(L10n.string("quote.exit"))
             return true
         }
 
@@ -890,7 +890,7 @@ struct NativeRichTextEditor {
             let updated = NSMutableAttributedString(attributedString: storage)
             updated.addAttribute(.weaveTaskChecked, value: !checked, range: paragraph)
             apply(text: updated, selection: currentSelection, attributes: view.typingAttributes)
-            view.undoManager?.setActionName(L10n.string("切换待办"))
+            view.undoManager?.setActionName(L10n.string("checklist.toggle.undo"))
             return true
         }
 
@@ -912,7 +912,7 @@ struct NativeRichTextEditor {
                 selection: currentSelection,
                 attributes: attributes
             )
-            view.undoManager?.setActionName(L10n.string("切换待办"))
+            view.undoManager?.setActionName(L10n.string("checklist.toggle.undo"))
             return true
         }
 
@@ -1185,7 +1185,7 @@ struct NativeRichTextEditor {
                 if let marker = layout.taskMarkerIndex(in: paragraph) {
                     let checked = storage.attribute(.weaveTaskChecked, at: marker, effectiveRange: nil) as? Bool ?? false
                     let text = source.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let name = checked ? L10n.string("将“\(text)”标记为未完成") : L10n.string("将“\(text)”标记为已完成")
+                    let name = checked ? L10n.markIncomplete(text) : L10n.markComplete(text)
                     actions.append(
                         NSAccessibilityCustomAction(name: name) { [weak self] in
                             self?.toggleTask?(marker) ?? false
@@ -1508,7 +1508,7 @@ struct NativeRichTextEditor {
             view.isAutomaticQuoteSubstitutionEnabled = false
             view.isAutomaticDashSubstitutionEnabled = false
             view.textContainerInset = NSSize(width: 32, height: DocumentTypography.editorTopInset)
-            view.setAccessibilityLabel(L10n.string("记录正文"))
+            view.setAccessibilityLabel(L10n.string("note.body.accessibility_label"))
             view.setAccessibilityIdentifier("note-editor")
             view.textStorage?.setAttributedString(NativeTextAttributes.native(text, context: fontContext))
             view.delegate = context.coordinator
@@ -1737,7 +1737,7 @@ struct NativeRichTextEditor {
                 if let marker = layout.taskMarkerIndex(in: paragraph) {
                     let checked = textStorage.attribute(.weaveTaskChecked, at: marker, effectiveRange: nil) as? Bool ?? false
                     let text = source.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let name = checked ? L10n.string("将“\(text)”标记为未完成") : L10n.string("将“\(text)”标记为已完成")
+                    let name = checked ? L10n.markIncomplete(text) : L10n.markComplete(text)
                     actions.append(
                         UIAccessibilityCustomAction(name: name) { [weak self] _ in
                             self?.toggleTask?(marker) ?? false
@@ -1800,7 +1800,7 @@ struct NativeRichTextEditor {
             view.allowsEditingTextAttributes = true
             view.smartQuotesType = .no
             view.smartDashesType = .no
-            view.accessibilityLabel = L10n.string("记录正文")
+            view.accessibilityLabel = L10n.string("note.body.accessibility_label")
             view.accessibilityIdentifier = "note-editor"
             view.attributedText = NativeTextAttributes.native(text, context: fontContext)
             view.delegate = context.coordinator

@@ -88,7 +88,7 @@ struct Note: Identifiable, Codable, Equatable, Sendable {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-        return collapsed.isEmpty ? L10n.string("未命名记录") : collapsed
+        return collapsed.isEmpty ? L10n.string("note.untitled") : collapsed
     }
 
     var markdownFilename: String {

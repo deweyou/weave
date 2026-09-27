@@ -41,13 +41,13 @@
 
         private var title: String {
             switch library ?? .all {
-            case .recent: L10n.string("最近")
-            case .all: L10n.string("记录")
-            case .unfiled: L10n.string("未分类")
-            case .tasks: L10n.string("任务")
-            case .settings: L10n.string("设置")
-            case .document(let id): store.notes.first(where: { $0.id == id })?.displayTitle ?? L10n.string("记录")
-            case .folder(let id): store.folders.first(where: { $0.id == id })?.name ?? L10n.string("分类")
+            case .recent: L10n.string("note.recent")
+            case .all: L10n.string("navigation.notes")
+            case .unfiled: L10n.string("folder.unfiled")
+            case .tasks: L10n.string("navigation.tasks")
+            case .settings: L10n.string("settings.title")
+            case .document(let id): store.notes.first(where: { $0.id == id })?.displayTitle ?? L10n.string("navigation.notes")
+            case .folder(let id): store.folders.first(where: { $0.id == id })?.name ?? L10n.string("folder.title")
             }
         }
 
@@ -83,10 +83,10 @@
             }
             .navigationSplitViewStyle(.balanced)
             .onChange(of: query) { _, _ in galleryScroll.reset() }
-            .alert(editingFolderID == nil ? L10n.string("新建分类") : L10n.string("重命名分类"), isPresented: $showsFolderEditor) {
-                TextField("分类名称", text: $folderName).accessibilityIdentifier("folder-name")
-                Button("取消", role: .cancel) {}
-                Button("保存") {
+            .alert(editingFolderID == nil ? L10n.string("folder.create") : L10n.string("folder.rename"), isPresented: $showsFolderEditor) {
+                TextField("folder.name", text: $folderName).accessibilityIdentifier("folder-name")
+                Button("common.cancel", role: .cancel) {}
+                Button("common.save") {
                     if let editingFolderID {
                         store.renameFolder(id: editingFolderID, name: folderName)
                     } else if let id = store.createFolder(name: folderName) {
@@ -99,15 +99,15 @@
             .sheet(item: $movingNote) { note in
                 NavigationStack {
                     List {
-                        moveDestination(L10n.string("未分类"), folderID: nil, note: note)
+                        moveDestination(L10n.string("folder.unfiled"), folderID: nil, note: note)
                         ForEach(store.folders) { folder in
                             moveDestination(folder.name, folderID: folder.id, note: note)
                         }
                     }
-                    .navigationTitle(L10n.string("移动到分类"))
+                    .navigationTitle(L10n.string("folder.move"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .cancellationAction) { Button("取消") { movingNote = nil } }
+                        ToolbarItem(placement: .cancellationAction) { Button("common.cancel") { movingNote = nil } }
                     }
                 }
                 .presentationDetents([.medium, .large])
@@ -126,16 +126,16 @@
                     openCreatedNote(fromSidebar: importFromSidebar)
                 } catch { importError = error.localizedDescription }
             }
-            .alert("无法导入 Markdown", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
-                Button("好") { importError = nil }
+            .alert("markdown.import_failed", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+                Button("common.ok") { importError = nil }
             } message: {
                 Text(importError ?? "")
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if !isEditing, let error = store.saveError {
                     HStack {
-                        Label("尚未保存：\(error)", systemImage: "exclamationmark.triangle")
-                        Button("重试") { store.retrySave() }
+                        Label(L10n.unsaved(error), systemImage: "exclamationmark.triangle")
+                        Button("common.retry") { store.retrySave() }
                     }.font(.callout).padding().background(.bar)
                 }
             }
@@ -144,26 +144,26 @@
         private var sidebar: some View {
             List(selection: Binding(get: { library }, set: { select($0) })) {
                 Section {
-                    NavigationLink(value: MobileLibrary.all) { Label("记录", systemImage: "note.text") }
+                    NavigationLink(value: MobileLibrary.all) { Label("navigation.notes", systemImage: "note.text") }
                         .accessibilityIdentifier("workspace-notes")
                     NavigationLink(value: MobileLibrary.tasks) {
                         HStack {
-                            Label("任务", systemImage: "checklist")
+                            Label("navigation.tasks", systemImage: "checklist")
                             Spacer()
-                            Text("稍后推出").font(.caption).foregroundStyle(.secondary)
+                            Text("common.coming_soon").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .accessibilityIdentifier("workspace-tasks")
-                    NavigationLink(value: MobileLibrary.settings) { Label("设置", systemImage: "gearshape") }
+                    NavigationLink(value: MobileLibrary.settings) { Label("settings.title", systemImage: "gearshape") }
                         .accessibilityIdentifier("workspace-settings")
                 }
                 if library != .tasks && library != .settings {
-                    Section("记录") {
-                        libraryLink(L10n.string("最近"), symbol: "clock", destination: .recent)
-                        libraryLink(L10n.string("全部记录"), symbol: "tray.full", destination: .all)
-                        libraryLink(L10n.string("未分类"), symbol: "tray", destination: .unfiled)
+                    Section("navigation.notes") {
+                        libraryLink(L10n.string("note.recent"), symbol: "clock", destination: .recent)
+                        libraryLink(L10n.string("note.all"), symbol: "tray.full", destination: .all)
+                        libraryLink(L10n.string("folder.unfiled"), symbol: "tray", destination: .unfiled)
                     }
-                    Section("分类") {
+                    Section("folder.title") {
                         ForEach(store.folders) { folder in
                             DisclosureGroup(
                                 isExpanded: Binding(
@@ -183,11 +183,11 @@
                             } label: {
                                 libraryLink(folder.name, symbol: "folder", destination: .folder(folder.id))
                                     .contextMenu {
-                                        Button("重命名…", systemImage: "pencil") { editFolder(folder) }
+                                        Button("common.rename", systemImage: "pencil") { editFolder(folder) }
                                     }
                             }
                         }
-                        Button("新建分类", systemImage: "folder.badge.plus") { editFolder(nil) }
+                        Button("folder.create", systemImage: "folder.badge.plus") { editFolder(nil) }
                             .accessibilityIdentifier("new-folder")
                             .disabled(store.loadError != nil)
                     }
@@ -206,16 +206,17 @@
                 AppSettingsView()
             } else if let error = store.loadError {
                 ContentUnavailableView {
-                    Label("无法读取记录", systemImage: "exclamationmark.triangle")
+                    Label("storage.load_failed.title", systemImage: "exclamationmark.triangle")
                 } description: {
-                    Text("原文件已保留。\n\(error)")
+                    Text(L10n.originalPreserved(error))
                 } actions: {
-                    Button("重新读取") { store.reload() }
+                    Button("storage.reload") { store.reload() }
                 }
             } else if case .document(let id) = library {
                 editor(id)
             } else if library == .tasks {
-                ContentUnavailableView("任务稍后推出", systemImage: "checklist", description: Text("独立任务和任务分类正在规划中。你仍可以在记录中使用待办列表。"))
+                ContentUnavailableView(
+                    "tasks.coming_soon.title", systemImage: "checklist", description: Text("tasks.coming_soon.description"))
             } else {
                 RecordGallery(notes: notes, scrollState: galleryScroll) { note in
                     Button {
@@ -227,18 +228,18 @@
                     .accessibilityIdentifier("note-row-\(note.id)")
                     .contextMenu { noteActions(note) }
                 }
-                .searchable(text: $query, prompt: "搜索\(title)")
+                .searchable(text: $query, prompt: L10n.searchNotes(title))
                 .overlay {
                     if notes.isEmpty {
                         if !query.isEmpty {
                             ContentUnavailableView.search(text: query)
                         } else {
                             ContentUnavailableView {
-                                Label("从一条记录开始", systemImage: "note.text")
+                                Label("note.empty.title", systemImage: "note.text")
                             } description: {
-                                Text("写下想法，把内容慢慢整理起来。")
+                                Text("note.empty.description")
                             } actions: {
-                                Button("新建记录", systemImage: "plus") { createNote() }
+                                Button("note.create", systemImage: "plus") { createNote() }
                                     .buttonStyle(.glassProminent).accessibilityIdentifier("empty-new-note")
                             }
                         }
@@ -250,12 +251,12 @@
 
         @ToolbarContentBuilder private func libraryToolbar(fromSidebar: Bool) -> some ToolbarContent {
             ToolbarItemGroup(placement: .primaryAction) {
-                Menu("记录操作", systemImage: "ellipsis.circle") {
-                    Button("新建分类", systemImage: "folder.badge.plus") { editFolder(nil) }
+                Menu("note.actions", systemImage: "ellipsis.circle") {
+                    Button("folder.create", systemImage: "folder.badge.plus") { editFolder(nil) }
                     if case .folder(let id) = library, let folder = store.folders.first(where: { $0.id == id }) {
-                        Button("重命名分类…", systemImage: "pencil") { editFolder(folder) }
+                        Button("folder.rename.menu", systemImage: "pencil") { editFolder(folder) }
                     }
-                    Button("导入 Markdown…", systemImage: "square.and.arrow.down") {
+                    Button("markdown.import", systemImage: "square.and.arrow.down") {
                         importFromSidebar = fromSidebar
                         showsImport = true
                     }
@@ -263,7 +264,7 @@
                 }
                 .accessibilityIdentifier("library-actions")
                 .disabled(store.loadError != nil)
-                Button("新建记录", systemImage: "square.and.pencil") { createNote(fromSidebar: fromSidebar) }
+                Button("note.create", systemImage: "square.and.pencil") { createNote(fromSidebar: fromSidebar) }
                     .accessibilityIdentifier("new-note")
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(store.loadError != nil)
@@ -271,7 +272,7 @@
         }
 
         @ViewBuilder private func noteActions(_ note: Note) -> some View {
-            Button("移动到分类", systemImage: "folder") { movingNote = note }
+            Button("folder.move", systemImage: "folder") { movingNote = note }
         }
 
         private func moveDestination(_ name: String, folderID: UUID?, note: Note) -> some View {
@@ -282,7 +283,7 @@
                 HStack {
                     Label(name, systemImage: "folder")
                     Spacer()
-                    if note.folderID == folderID { Image(systemName: "checkmark").accessibilityLabel("当前分类") }
+                    if note.folderID == folderID { Image(systemName: "checkmark").accessibilityLabel("folder.current") }
                 }
             }
         }
@@ -329,7 +330,7 @@
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .primaryAction) {
-                            Menu("整理记录", systemImage: "ellipsis.circle") { noteActions(note) }
+                            Menu("note.organize", systemImage: "ellipsis.circle") { noteActions(note) }
                                 .accessibilityIdentifier("organize-note")
                         }
                     }
