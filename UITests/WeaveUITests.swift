@@ -169,9 +169,9 @@ final class WeaveUITests: XCTestCase {
             app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
             app.launch()
             app.buttons["workspace-settings"].click()
-            XCTAssertTrue(app.staticTexts["Basics"].waitForExistence(timeout: 5))
             let theme = app.popUpButtons["settings-theme"]
-            XCTAssertTrue(theme.exists)
+            XCTAssertTrue(theme.waitForExistence(timeout: 5))
+            XCTAssertEqual(theme.label, "Theme")
             theme.click()
             app.menuItems["Dark"].click()
             XCTAssertEqual(theme.value as? String, "Dark")
