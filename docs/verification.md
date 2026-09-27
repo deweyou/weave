@@ -82,7 +82,7 @@ python3 scripts/check_coverage.py "$(swift test --show-codecov-path)"
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
-行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、WorkspaceView、MacWorkspaceView、MobileWorkspaceView 、NativeTableView 和 Toast；ToastPresenter 仍归入核心逻辑组。桥接组包含 NativeRichTextEditor、NativeTextAttributes、NativeTableOverlay 与 NativeRecordGallery。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；当前平台编译的全部文件均计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
+行覆盖率下限在 `scripts/check_coverage.py` 集中定义：核心逻辑 90%、原生桥接 55%、全源码 35%。UI 组包含 App 入口、AppSettingsView、WorkspaceView、MacWorkspaceView、MobileWorkspaceView 、NativeTableView 和 Toast；ToastPresenter 仍归入核心逻辑组。桥接组包含 NativeRichTextEditor、NativeTextAttributes、NativeTableOverlay 与 NativeRecordGallery。核心包含除这两组以外的全部 Swift 文件，新增文件默认纳入；当前平台编译的全部文件均计入全源码。报告缺失、源码缺项、重复条目或非法计数直接失败。门槛基于起步实测，不能把全源码 35% 描述成全项目 90%；后续扩大测试后应提高门槛，不因失败自动降低。
 
 Package 单测运行在 Mac，覆盖率脚本默认 `--platform macos`：明确列出且排除整个文件受 `#if os(iOS)` 包裹的 `App/MobileWorkspaceView.swift`；`--platform ios` 对应排除 Mac 专属工作区文件。平台专属映射以完整相对路径列举，其他新增文件仍须有报告。移动端工作区行为由 iOS UI 测试验证，不能将 Mac 单测覆盖率当作它的覆盖率。
 
@@ -97,11 +97,11 @@ xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Sim
 
 添加 `-resultBundlePath` 可保存到尚不存在的 `.xcresult` 路径。Mac UI 测试需要可用桌面与测试自动化权限，会操作测试 App。CI 使用临时宿主；本地不在操作其他 App 时混跑 UI 测试。
 
-每个 UI 测试通过 Debug 专用 `WEAVE_UI_TEST_SESSION` UUID 使用独立的 Application Support/WeaveUITests 子目录；重启同一测试继续读取相同数据，不使用或清理真实 Weave/notes.json。Release 不读取该变量。测试以稳定 accessibilityIdentifier 查找控件；Mac 小屏幕会把工具栏动作收进溢出菜单，首次新建通过空状态主按钮完成，不假设工具栏动作始终可见。截图和文本断言只证明所覆盖场景；真实中文候选、富文本视觉和触控仍按上面的矩阵验证。
+每个 UI 测试通过 Debug 专用 `WEAVE_UI_TEST_SESSION` UUID 使用独立的 Application Support/WeaveUITests 子目录；重启同一测试继续读取相同数据，不使用或清理真实 Weave/notes.json。Release 不读取该变量。测试以稳定 accessibilityIdentifier 查找控件；Mac 新建通过窗口顶部「+」完成，测试先进入文档页；默认 UI 测试固定以中文启动，英文设置页另有独立用例。截图和文本断言只证明所覆盖场景；真实中文候选、富文本视觉和触控仍按上面的矩阵验证。
 
 ## Mac 工作区布局回归
 
-使用隔离 UUID 存储，检查：列表底部新建 → 输入标题和正文 → 再新建 → 在左栏切换笔记 → 点击功能栏「首页」返回总览 → 重启。核对所有笔记恢复，旧分类中的笔记仍显示在列表中，Command-N 不指定分类。
+使用隔离 UUID 存储，检查：文档 → Inbox → 窗口顶部右上角「+」新建 → 输入标题和正文 → 返回 Inbox 再新建 → 点击 Inbox 返回总览并打开另一篇文档 → 点击功能栏「文档」返回总览 → 重启。核对所有笔记恢复，旧分类中的笔记仍显示在列表中，Command-N 不指定分类。
 
 检查分类、搜索、Markdown 文件导入、窗口顶部工具栏、正文格式栏均不再出现。系统窗口控制和菜单栏保持可用；「首页/文档/任务/设置」切换不丢失笔记，打开记录时选中文档，设置固定底部，选中/未选中分别显示 fill/线框图标。浅深色与增加对比度下卡片边界清楚，圆角不裁切内容；窗口缩放和分栏拖动时检查选区、正文和滚动。保存失败仍提供重试入口。
 
@@ -134,7 +134,7 @@ iPad 宽窗口检查侧栏与内容同时显示；编辑时旋转、调整窗口
 
 ## 记录卡片回归
 
-Mac 检查首页使用卡片，点击「首页」回到全部内容；iPhone 与 iPad 检查记录首页和分类均使用卡片，点击「记录」回到全部内容。各平台按最近编辑排序。检查无标题、长标题、长正文、空分类和搜索无结果；打开卡片再返回应保留筛选与滚动定位。移动端长按卡片或编辑页菜单完成移动，不再依赖列表轻扫。
+Mac 检查首页为空态、文档 Inbox 使用卡片，点击「文档」或 Inbox 回到全部内容；iPhone 与 iPad 检查记录首页和分类均使用卡片，点击「记录」回到全部内容。各平台按最近编辑排序。检查无标题、长标题、长正文、空分类和搜索无结果；打开卡片再返回应保留筛选与滚动定位。移动端长按卡片或编辑页菜单完成移动，不再依赖列表轻扫。
 
 瀑布流回归：混合一句话、长标题、无标题、清单和千字长文，检查高度上下限、摘要截断、日期不被挤出；缩放窗口跨越一/二/三列边界时无重叠或横向溢出。`RecordMasonryLayoutTests` 检查最短列填充和多种宽度下的边界与不重叠；实际文字高度、滚动返回、触控和大字号仍需对应平台检查。
 
@@ -234,3 +234,15 @@ xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Sim
 macOS UI 用例使用 `click()` 发送鼠标事件，原生分类弹窗可用 Return 提交。运行期间需保持测试 App 在前台；XCTest 日志若出现其他应用的 `interrupting element`，应按桌面交互干扰排查，不能据此判断业务通过或失败。
 
 瀑布流的 Mac 实测：千条记录的 3 轮往返滚动、滚动后打开记录及返回位置恢复 UI 用例已通过。分类整理与搜索回归此次受其他应用窗口遮挡影响，完整流程尚未通过；布局、视口查询与宿主复用测试的结果应与这些 UI 回归分别报告。
+
+
+## 基础设置与 i18n
+
+- `AppPreferencesTests` 使用独立 UserDefaults suite，覆盖默认值、无效偏好回退、重建后恢复、语言切换不改变本次活动语言、中英文资源同键与参数一致性、中文/emoji 动态文案插值。
+- Mac 实际切换浅色、深色、跟随系统，检查玻璃底板、内容卡片、原生正文/表格/代码操作栏、关闭弹出菜单后的焦点；重启检查主题与语言保留。编辑中的内容、选区和撤销不能因为外观变化丢失。
+- 中英文分别检查导航、设置、空状态、菜单、错误提示和辅助标签；笔记标题、正文与分类名称原文保持。检查窄窗口、英文较长说明和 Dynamic Type；系统或第三方原始错误详情不要求应用自行翻译。
+- 构建时可启用 `SWIFT_EMIT_LOC_STRINGS=YES`，比较两平台编译器导出的 Localizable key 与资源，查漏掉的插值/移动端专用文案。仅资源测试和编译通过不代表平台 UI、VoiceOver、手型指针已验收。
+
+文档总览主题回归：在深色/浅色之间反复切换并返回文档 Inbox，检查已显示与滚动复用的卡片背景、标题、摘要和边框均更新。原生卡片宿主同步 SwiftUI colorScheme 与 AppKit appearance；RecordGalleryPerformanceTests 覆盖复用宿主反复切换外观，且不新增宿主、不重新测量布局。
+
+Mac 历史导航：检查首次启动前后退均禁用；首页 → 文档 Inbox → 打开文档 → 设置，连续后退/前进应恢复对应页面和文档。后退后改去任务页，前进应禁用；重复点击当前入口不增加历史。检查红绿灯和导航按钮不重叠、顶部拖动区域仍可用。MacWorkspaceNavigationTests 覆盖历史边界、分支及窗口隔离；光标与选区恢复不属于当前历史实现。

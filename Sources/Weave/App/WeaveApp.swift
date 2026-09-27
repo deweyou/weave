@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct WeaveApp: App {
     @State private var store: NoteStore
+    @State private var preferences = AppPreferences()
     @Environment(\.scenePhase) private var scenePhase
 
     #if os(macOS)
@@ -47,6 +48,9 @@ struct WeaveApp: App {
         WindowGroup {
             WorkspaceView(store: store)
                 .tint(AppTheme.accent)
+                .environment(preferences)
+                .environment(\.locale, preferences.activeLanguage.locale)
+                .preferredColorScheme(preferences.theme.colorScheme)
                 .onChange(of: scenePhase) { _, phase in
                     guard phase != .active else { return }
                     Task { await store.flushPendingSave() }
@@ -56,8 +60,13 @@ struct WeaveApp: App {
             .windowStyle(.hiddenTitleBar)
             .defaultSize(width: 1000, height: 720)
             .commands {
+                CommandGroup(replacing: .appSettings) {
+                    Button(L10n.string("设置…")) { navigation?.select(.settings) }
+                    .keyboardShortcut(",", modifiers: .command)
+                    .disabled(navigation == nil)
+                }
                 CommandGroup(replacing: .newItem) {
-                    Button("新建记录", systemImage: "square.and.pencil") {
+                    Button(L10n.string("新建记录"), systemImage: "square.and.pencil") {
                         navigation?.createNote(in: store)
                     }
                     .keyboardShortcut("n", modifiers: .command)

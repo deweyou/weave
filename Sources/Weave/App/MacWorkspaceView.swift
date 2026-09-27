@@ -4,23 +4,56 @@
 
     @MainActor @Observable
     final class MacWorkspaceNavigation {
-        enum Destination {
+        enum Destination: Equatable {
             case home, documents, tasks, settings
         }
 
-        var editorID: UUID?
-        var destination = Destination.home
+        private struct Location: Equatable {
+            var destination: Destination
+            var editorID: UUID?
+        }
+
+        private var location = Location(destination: .home)
+        private var backHistory: [Location] = []
+        private var forwardHistory: [Location] = []
+
+        var destination: Destination { location.destination }
+        var editorID: UUID? { location.editorID }
+        var canGoBack: Bool { !backHistory.isEmpty }
+        var canGoForward: Bool { !forwardHistory.isEmpty }
 
         func select(_ destination: Destination) {
-            editorID = nil
-            self.destination = destination
+            visit(Location(destination: destination))
+        }
+
+        func openNote(_ id: UUID) {
+            visit(Location(destination: .documents, editorID: id))
+        }
+
+        func goBack() {
+            guard let previous = backHistory.popLast() else { return }
+            forwardHistory.append(location)
+            location = previous
+        }
+
+        func goForward() {
+            guard let next = forwardHistory.popLast() else { return }
+            backHistory.append(location)
+            location = next
+        }
+
+        private func visit(_ next: Location) {
+            guard next != location else { return }
+            backHistory.append(location)
+            location = next
+            forwardHistory.removeAll()
         }
 
         func createNote(in store: NoteStore) {
             store.createNote()
-            editorID = store.selectedID
-            destination = .documents
+            if let id = store.selectedID { openNote(id) }
         }
+
     }
 
     extension FocusedValues {
@@ -43,24 +76,44 @@
             HStack(spacing: 0) {
                 functionRail
                 workspaceCard
+                    .background(WorkspaceWindowControls())
                     .padding(.trailing, 4)
                     .padding(.bottom, 4)
-                    .padding(.top, 6)
+                    .padding(.top, 14)
             }
             .background {
-                if reduceTransparency {
-                    Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
-                } else {
-                    WorkspaceBackdrop().ignoresSafeArea().allowsHitTesting(false)
+                ZStack {
+                    if reduceTransparency {
+                        Color(nsColor: .windowBackgroundColor)
+                    } else {
+                        WorkspaceBackdrop()
+                    }
+                    // Keep the glass tint close to the document canvas without hiding it.
+                    Color(nsColor: .textBackgroundColor)
+                        .opacity(contrast == .increased ? 0 : (colorScheme == .dark ? 0.68 : 0.50))
                 }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
             }
             .containerBackground(.clear, for: .window)
             .frame(minWidth: 780, minHeight: 460)
             .containerShape(.rect(cornerRadius: 16))
-            .focusedSceneValue(\.workspaceNavigation, navigation)
-            .onChange(of: navigation.editorID) { _, id in
-                if id != nil { navigation.destination = .documents }
+            .overlay(alignment: .top) {
+                HStack(spacing: 4) {
+                    historyButton("后退", symbol: "chevron.left", enabled: navigation.canGoBack, action: navigation.goBack)
+                        .accessibilityIdentifier("navigation-back")
+                    historyButton("前进", symbol: "chevron.right", enabled: navigation.canGoForward, action: navigation.goForward)
+                        .accessibilityIdentifier("navigation-forward")
+                    Spacer(minLength: 0)
+                    if navigation.destination == .documents { newNoteButton }
+                }
+                .padding(.leading, 84)
+                .padding(.trailing, 12)
+                .frame(height: 46)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(edges: .top)
             }
+            .focusedSceneValue(\.workspaceNavigation, navigation)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if navigation.editorID == nil, let error = store.saveError {
                     HStack {
@@ -72,17 +125,49 @@
             }
         }
 
+        private func historyButton(
+            _ title: LocalizedStringKey, symbol: String, enabled: Bool, action: @escaping () -> Void
+        ) -> some View {
+            Button(action: action) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .regular))
+                    .frame(width: 28, height: 32)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .tint(.primary)
+            .accessibilityLabel(title)
+            .help(title)
+            .disabled(!enabled)
+            .pointerStyle(enabled ? .link : .default)
+        }
+
+        private var newNoteButton: some View {
+            Button {
+                navigation.createNote(in: store)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .regular))
+                    .frame(width: 32, height: 32)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .tint(.primary)
+            .accessibilityLabel("新建记录")
+            .accessibilityIdentifier("new-note")
+            .help("新建记录 ⌘N")
+            .disabled(store.loadError != nil)
+            .pointerStyle(store.loadError == nil ? .link : .default)
+        }
+
         private var functionRail: some View {
             VStack(spacing: 6) {
                 destinationButton("首页", symbol: "house", isSelected: navigation.destination == .home) {
                     navigation.select(.home)
                 }
-                .accessibilityIdentifier("workspace-notes")
+                .accessibilityIdentifier("workspace-home")
                 destinationButton("文档", symbol: "doc.text", isSelected: navigation.destination == .documents) {
-                    navigation.destination = .documents
-                    if navigation.editorID == nil {
-                        navigation.editorID = notes.first(where: { $0.id == store.selectedID })?.id ?? notes.first?.id
-                    }
+                    navigation.select(.documents)
                 }
                 .accessibilityIdentifier("workspace-documents")
                 destinationButton("任务", symbol: "checkmark.square", isSelected: navigation.destination == .tasks) {
@@ -95,7 +180,7 @@
                     navigation.select(.settings)
                 }
                 .accessibilityIdentifier("workspace-settings")
-                .help("设置 · 稍后推出")
+                .help("设置")
             }
             .padding(.top, 14)
             .padding(.bottom, 12)
@@ -106,7 +191,7 @@
         }
 
         private func destinationButton(
-            _ title: String, symbol: String, isSelected: Bool, action: @escaping () -> Void
+            _ title: LocalizedStringKey, symbol: String, isSelected: Bool, action: @escaping () -> Void
         ) -> some View {
             Button(action: action) {
                 Image(systemName: isSelected ? "\(symbol).fill" : symbol)
@@ -130,15 +215,25 @@
         }
 
         private var workspaceCard: some View {
-            HSplitView {
-                sidebar
-                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
-                    .background(WorkspaceSplitPosition())
-                VStack(spacing: 0) {
-                    detail
+            Group {
+                if navigation.destination == .settings {
+                    AppSettingsView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if navigation.destination == .home {
+                    ContentUnavailableView("首页", systemImage: "house", description: Text("从文档开始记录。"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    HSplitView {
+                        notesSidebar
+                            .frame(minWidth: 200, idealWidth: 240, maxWidth: 300)
+                            .background(WorkspaceSplitPosition())
+                        VStack(spacing: 0) {
+                            detail
+                        }
+                        .frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(nsColor: .textBackgroundColor))
+                    }
                 }
-                .frame(minWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .textBackgroundColor))
             }
             .background(Color(nsColor: .textBackgroundColor))
             .clipShape(workspaceCardShape)
@@ -162,34 +257,40 @@
                 bottomLeadingCorner: .fixed(16), bottomTrailingCorner: .concentric)
         }
 
-        private var sidebar: some View {
+        private var notesSidebar: some View {
             VStack(spacing: 0) {
-                List(selection: $navigation.editorID) {
-                    if navigation.destination == .home || navigation.destination == .documents {
-                        ForEach(notes) { note in
-                            Text(note.displayTitle)
-                                .lineLimit(1)
-                                .tag(note.id)
-                                .accessibilityIdentifier("sidebar-note-\(note.id)")
-                                .contentShape(Rectangle())
-                                .pointerStyle(.link)
+                if navigation.destination == .documents {
+                    Button {
+                        navigation.select(.documents)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                                .accessibilityHidden(true)
+                            Text(verbatim: "Inbox")
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 0)
                         }
+                        .padding(.horizontal, 10)
+                        .frame(height: 32)
+                        .background {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.primary.opacity(contrast == .increased ? 0.16 : 0.06))
+                        }
+                        .contentShape(.rect(cornerRadius: 8))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("documents-inbox")
+                    .accessibilityAddTraits(.isSelected)
+                    .pointerStyle(.link)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 12)
                 }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                if navigation.destination == .home || navigation.destination == .documents {
-                    Button("新建记录", systemImage: "square.and.pencil") {
-                        navigation.createNote(in: store)
-                    }
-                    .accessibilityIdentifier("new-note")
-                    .help("新建记录 ⌘N")
-                    .buttonStyle(.borderless)
-                    .disabled(store.loadError != nil)
-                    .pointerStyle(store.loadError == nil ? .link : .default)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                }
+                Spacer(minLength: 0)
+
             }
             .background(Color(nsColor: .textBackgroundColor))
         }
@@ -205,10 +306,7 @@
                 }
             } else if navigation.destination == .tasks {
                 ContentUnavailableView("任务稍后推出", systemImage: "checklist", description: Text("独立任务和任务分类正在规划中。你仍可以在记录中使用待办列表。"))
-                    .navigationTitle("任务")
-            } else if navigation.destination == .settings {
-                ContentUnavailableView("设置稍后推出", systemImage: "gearshape", description: Text("个性化设置将在后续加入。"))
-                    .navigationTitle("设置")
+                    .navigationTitle(L10n.string("任务"))
             } else if let note = store.notes.first(where: { $0.id == navigation.editorID }) {
                 NoteEditorView(note: note, store: store, saveError: store.saveError, retrySave: store.retrySave)
                     .id(note.id)
@@ -219,15 +317,16 @@
 
         private var library: some View {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("记录").font(.largeTitle.bold())
+                HStack(alignment: .center, spacing: 12) {
+                    Text(verbatim: "Inbox").font(.largeTitle.bold())
                     Spacer()
                     Text("\(notes.count) 条记录").foregroundStyle(.secondary)
+
                 }
                 .padding(.horizontal, 36).padding(.top, 24).padding(.bottom, 4)
                 RecordGallery(notes: notes, scrollState: galleryScroll) { note in
                     Button {
-                        navigation.editorID = note.id
+                        navigation.openNote(note.id)
                     } label: {
                         RecordCard(note: note)
                     }
@@ -243,16 +342,57 @@
                             Label("从一条记录开始", systemImage: "note.text")
                         } description: {
                             Text("写下想法。")
-                        } actions: {
-                            Button("新建记录", systemImage: "plus") { navigation.createNote(in: store) }
-                                .buttonStyle(.glassProminent)
-                                .accessibilityIdentifier("empty-new-note")
-                                .pointerStyle(.link)
                         }
                     }
                 }
             }
-            .navigationTitle("记录")
+            .navigationTitle("Inbox")
+        }
+    }
+
+    /// Center native window controls in the full strip above the card.
+    private struct WorkspaceWindowControls: NSViewRepresentable {
+        func makeNSView(context: Context) -> AlignmentView { AlignmentView() }
+
+        func updateNSView(_ view: AlignmentView, context: Context) {
+            view.needsLayout = true
+        }
+
+        final class AlignmentView: NSView {
+            override func viewDidMoveToWindow() {
+                super.viewDidMoveToWindow()
+                NotificationCenter.default.removeObserver(self)
+                guard let window else { return }
+                // SwiftUI may mount this probe before AppKit restores the final window size.
+                // Reconcile after window updates as well as geometry changes; alignment is idempotent.
+                for name in [NSWindow.didResizeNotification, NSWindow.didExitFullScreenNotification, NSWindow.didUpdateNotification] {
+                    NotificationCenter.default.addObserver(self, selector: #selector(alignControls), name: name, object: window)
+                }
+                needsLayout = true
+            }
+
+            override func layout() {
+                super.layout()
+                alignControls()
+            }
+
+            @objc private func alignControls() {
+                guard let window, !window.styleMask.contains(.fullScreen), bounds.height > 0 else { return }
+                let cardTop = convert(bounds, to: nil).maxY
+                let stripHeight = window.frame.height - cardTop
+                // Do not reposition system controls during transient or full-screen layouts.
+                guard (20...80).contains(stripHeight) else { return }
+                let center = NSPoint(x: 0, y: cardTop + stripHeight / 2)
+                for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                    guard let button = window.standardWindowButton(kind), let parent = button.superview else { continue }
+                    let y = parent.convert(center, from: nil).y - button.frame.height / 2
+                    if abs(button.frame.origin.y - y) > 0.25 {
+                        button.setFrameOrigin(NSPoint(x: button.frame.origin.x, y: y))
+                    }
+                }
+            }
+
+            override func hitTest(_ point: NSPoint) -> NSView? { nil }
         }
     }
 

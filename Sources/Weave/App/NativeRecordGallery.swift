@@ -25,7 +25,8 @@ struct RecordGallery<Card: View>: View {
             notes: notes, scrollState: scrollState, resetGeneration: scrollState.resetGeneration,
             typography: RecordCardTypography(
                 title: Font.headline.resolve(in: fontContext), summary: Font.subheadline.resolve(in: fontContext),
-                caption: Font.caption.resolve(in: fontContext), minimumHeight: minimumHeight, maximumHeight: maximumHeight)
+                caption: Font.caption.resolve(in: fontContext), minimumHeight: minimumHeight, maximumHeight: maximumHeight),
+            colorScheme: environment.colorScheme
         ) { note in
             // Copy only display settings. Copying the entire environment also
             // imports navigation accessibility state into these independent hosts.
@@ -49,6 +50,7 @@ final class RecordGalleryCoordinator: NSObject {
     var card: (Note) -> AnyView = { _ in AnyView(EmptyView()) }
     var scrollState = RecordGalleryScrollState()
     var resetGeneration = -1
+    private(set) var colorScheme: ColorScheme = .light
     private(set) var createdHostCount = 0
 
     init(geometry: RecordGalleryLayout) {
@@ -59,6 +61,7 @@ final class RecordGalleryCoordinator: NSObject {
     func update(_ gallery: NativeRecordGallery) -> Bool {
         let needsInitialReload = notes.isEmpty && !gallery.notes.isEmpty
         card = gallery.card
+        colorScheme = gallery.colorScheme
         scrollState = gallery.scrollState
         // Reuse previews across parent updates; don't project rich text again just
         // because a menu, selection or appearance changed.
@@ -81,6 +84,7 @@ final class RecordGalleryCoordinator: NSObject {
         let scrollState: RecordGalleryScrollState
         let resetGeneration: Int
         let typography: RecordCardTypography
+        var colorScheme: ColorScheme = .light
         let card: (Note) -> AnyView
 
         func makeCoordinator() -> RecordGalleryCoordinator { RecordGalleryCoordinator(geometry: scrollState.geometry) }
@@ -131,7 +135,7 @@ final class RecordGalleryCoordinator: NSObject {
                     guard let path = collection.indexPath(for: item), notes.indices.contains(path.item),
                         let item = item as? RecordGalleryItem
                     else { continue }
-                    item.setContent(card(notes[path.item]))
+                    item.setContent(card(notes[path.item]), colorScheme: colorScheme)
                 }
             }
             scroll.needsLayout = true
@@ -183,12 +187,18 @@ final class RecordGalleryCoordinator: NSObject {
 
         override func loadView() { view = NSView() }
 
-        func setContent(_ content: AnyView) {
+        func setContent(_ content: AnyView, colorScheme: ColorScheme) {
+            // Independent hosts need the AppKit appearance as well as SwiftUI's colorScheme:
+            // native semantic backgrounds otherwise retain the previous window appearance.
+            let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
+            view.appearance = appearance
             if let host {
+                host.appearance = appearance
                 host.rootView = content
                 return
             }
             let host = NSHostingView(rootView: content)
+            host.appearance = appearance
             host.sizingOptions = []
             host.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(host)
@@ -212,7 +222,7 @@ final class RecordGalleryCoordinator: NSObject {
             let item = collectionView.makeItem(withIdentifier: .init("record-card"), for: indexPath)
             if let item = item as? RecordGalleryItem {
                 if !item.hasHost { didCreateHost() }
-                item.setContent(card(notes[indexPath.item]))
+                item.setContent(card(notes[indexPath.item]), colorScheme: colorScheme)
             }
             return item
         }
@@ -249,6 +259,7 @@ final class RecordGalleryCoordinator: NSObject {
         let scrollState: RecordGalleryScrollState
         let resetGeneration: Int
         let typography: RecordCardTypography
+        var colorScheme: ColorScheme = .light
         let card: (Note) -> AnyView
 
         func makeCoordinator() -> RecordGalleryCoordinator { RecordGalleryCoordinator(geometry: scrollState.geometry) }

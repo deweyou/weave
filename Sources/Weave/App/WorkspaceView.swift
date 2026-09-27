@@ -36,7 +36,7 @@ struct RecordCard: View {
                 Text(note.displayTitle).font(.headline).lineLimit(2).layoutPriority(1)
                 Spacer(minLength: 0)
             }
-            Text(note.text.isEmpty ? "暂无正文" : String(note.text.prefix(600)))
+            Text(note.text.isEmpty ? L10n.string("暂无正文") : String(note.text.prefix(600)))
                 .font(.subheadline).foregroundStyle(.secondary).lineLimit(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(note.updatedAt, format: .dateTime.month().day())
@@ -146,20 +146,22 @@ struct NoteEditorView: View {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu("格式", systemImage: "textformat") {
                         Button(
-                            formatLabel("加粗") { DocumentTypography.emphasis(in: $0, context: fontContext) & 1 != 0 }, systemImage: "bold"
+                            formatLabel(L10n.string("加粗")) { DocumentTypography.emphasis(in: $0, context: fontContext) & 1 != 0 },
+                            systemImage: "bold"
                         ) {
                             toggleBold()
                         }
                         .keyboardShortcut("b", modifiers: .command)
                         Button(
-                            formatLabel("斜体") { DocumentTypography.emphasis(in: $0, context: fontContext) & 2 != 0 }, systemImage: "italic"
+                            formatLabel(L10n.string("斜体")) { DocumentTypography.emphasis(in: $0, context: fontContext) & 2 != 0 },
+                            systemImage: "italic"
                         ) { toggleItalic() }
                         .keyboardShortcut("i", modifiers: .command)
-                        Button(formatLabel("下划线") { $0.underlineStyle != nil }, systemImage: "underline") {
+                        Button(formatLabel(L10n.string("下划线")) { $0.underlineStyle != nil }, systemImage: "underline") {
                             format { $0.underlineStyle = $0.underlineStyle == nil ? .single : nil }
                         }
                         .keyboardShortcut("u", modifiers: .command)
-                        Button(formatLabel("删除线") { $0.strikethroughStyle != nil }, systemImage: "strikethrough") {
+                        Button(formatLabel(L10n.string("删除线")) { $0.strikethroughStyle != nil }, systemImage: "strikethrough") {
                             format { $0.strikethroughStyle = $0.strikethroughStyle == nil ? .single : nil }
                         }
                         Divider()
@@ -250,7 +252,7 @@ struct NoteEditorView: View {
                     Text("输入完整的 https://、http:// 或 mailto: 地址。")
                         .foregroundStyle(.secondary)
                 }
-                .navigationTitle("编辑链接")
+                .navigationTitle(L10n.string("编辑链接"))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("取消") { showsLinkEditor = false } }
                     ToolbarItem(placement: .confirmationAction) {
@@ -289,7 +291,7 @@ struct NoteEditorView: View {
                         .foregroundStyle(.secondary)
                     }
                 }
-                .navigationTitle("Markdown 语法")
+                .navigationTitle(L10n.string("Markdown 语法"))
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("完成") { showsMarkdownHelp = false }
@@ -431,7 +433,7 @@ struct NoteEditorView: View {
         let values = selection.attributes(in: richText).map(matches)
         guard !values.isEmpty else { return title }
         if values.allSatisfy({ $0 }) { return "✓ " + title }
-        if values.contains(true) { return title + "（混合）" }
+        if values.contains(true) { return L10n.string("\(title)（混合）") }
         return title
     }
 

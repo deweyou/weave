@@ -12,11 +12,11 @@ actor CodeFormatting {
 
         var errorDescription: String? {
             switch self {
-            case .unsupported: "此语言暂不支持格式化。"
-            case .unavailable: "无法加载代码格式化组件。"
-            case .tooLarge: "代码超过 200,000 字符，暂不支持格式化。"
-            case .changed: "代码或语言已修改，请重新格式化。"
-            case .syntax(let message): "无法格式化，原文已保留。\n" + message
+            case .unsupported: L10n.string("此语言暂不支持格式化。")
+            case .unavailable: L10n.string("无法加载代码格式化组件。")
+            case .tooLarge: L10n.string("代码超过 200,000 字符，暂不支持格式化。")
+            case .changed: L10n.string("代码或语言已修改，请重新格式化。")
+            case .syntax(let message): L10n.string("无法格式化，原文已保留。\n\(message)")
             }
         }
     }
@@ -66,7 +66,7 @@ actor CodeFormatting {
             let result = context.objectForKeyedSubscript("weaveResult"), !result.isNull
         else { throw Failure.unavailable }
         if let error = result.forProperty("error"), !error.isUndefined {
-            throw Failure.syntax(error.toString() ?? "请检查代码语法。")
+            throw Failure.syntax(error.toString() ?? L10n.string("请检查代码语法。"))
         }
         guard var output = result.forProperty("value")?.toString() else { throw Failure.unavailable }
         // A block's last LF may be the boundary before body text. Preserve that

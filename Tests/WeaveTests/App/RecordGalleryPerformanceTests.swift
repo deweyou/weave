@@ -146,6 +146,42 @@ struct RecordGalleryPerformanceTests {
         print("Native gallery: \(coordinator.createdHostCount) hosts for 1000 records after 30 scrolls")
     }
 
+    @Test func reusedCardsUpdateNativeAppearanceWithoutRemeasuring() throws {
+        _ = NSApplication.shared
+        let note = Note(id: UUID(), text: "主题切换", createdAt: .distantPast, updatedAt: .distantPast, title: "Theme")
+        let state = RecordGalleryScrollState()
+        var gallery = NativeRecordGallery(
+            notes: [note], scrollState: state, resetGeneration: 0, typography: typography, colorScheme: .dark
+        ) { note in
+            AnyView(RecordCard(note: note))
+        }
+        let coordinator = gallery.makeCoordinator()
+        let scroll = gallery.makeScrollView(coordinator: coordinator)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView = scroll
+        gallery.update(scroll, coordinator: coordinator)
+        scroll.layoutSubtreeIfNeeded()
+        let collection = try #require(scroll.documentView as? NSCollectionView)
+        collection.layoutSubtreeIfNeeded()
+        let item = try #require(collection.visibleItems().first)
+        let host = try #require(item.view.subviews.first)
+        let measurements = coordinator.geometry.measurementCount
+        let hosts = coordinator.createdHostCount
+
+        for scheme in [ColorScheme.dark, .light, .dark, .light] {
+            gallery.colorScheme = scheme
+            gallery.update(scroll, coordinator: coordinator)
+            collection.layoutSubtreeIfNeeded()
+            #expect(item.view.subviews.first === host)
+            #expect(host.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == (scheme == .dark ? .darkAqua : .aqua))
+            #expect(coordinator.geometry.measurementCount == measurements)
+            #expect(coordinator.createdHostCount == hosts)
+        }
+    }
+
     @Test func cachedTextHeightMatchesCardContent() {
         _ = NSApplication.shared
         for text in ["Short", String(repeating: "中文与 emoji 👋 English text. ", count: 8), String(repeating: "Line\n", count: 40)] {

@@ -126,6 +126,7 @@ struct TableBlockView: View {
             }
             .overlay { Rectangle().strokeBorder(.primary.opacity(0.10), lineWidth: 0.5) }
         }
+        .environment(\.locale, L10n.language.locale)
         .onHover { isHovering = $0 }
         .onChange(of: focusedCell) { _, cell in
             if let cell { activeCell = cell }
@@ -203,7 +204,7 @@ struct TableBlockView: View {
 
     private func cell(row: Int, column: Int) -> some View {
         TextField(
-            row == 0 ? "表头" : "",
+            row == 0 ? L10n.string("表头") : "",
             text: Binding(
                 get: {
                     guard model.table.rows.indices.contains(row), model.table.alignments.indices.contains(column) else { return "" }
@@ -220,7 +221,7 @@ struct TableBlockView: View {
         .multilineTextAlignment(textAlignment(column))
         .padding(.horizontal, 10)
         .focused($focusedCell, equals: Cell(row: row, column: column))
-        .accessibilityLabel(row == 0 ? "第 \(column + 1) 列表头" : "第 \(row + 1) 行第 \(column + 1) 列")
+        .accessibilityLabel(row == 0 ? L10n.string("第 \(column + 1) 列表头") : L10n.string("第 \(row + 1) 行第 \(column + 1) 列"))
         .accessibilityIdentifier("table-cell-\(row)-\(column)")
         .onSubmit {
             if row + 1 < model.table.rows.count {
@@ -236,7 +237,7 @@ struct TableBlockView: View {
         }
     }
 
-    private func alignmentButton(_ title: String, symbol: String, value: TableAlignment) -> some View {
+    private func alignmentButton(_ title: LocalizedStringKey, symbol: String, value: TableAlignment) -> some View {
         Button {
             let column = activeCell.column
             model.change { $0.alignments[column] = value }

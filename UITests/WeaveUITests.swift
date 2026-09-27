@@ -14,7 +14,7 @@ final class WeaveUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchEnvironment["WEAVE_UI_TEST_SESSION"] = UUID().uuidString
-        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         #if os(macOS)
             // Window restoration is process-global for the bundle identifier. A prior
             // run that quit without an open window must not suppress the test window.
@@ -50,6 +50,7 @@ final class WeaveUITests: XCTestCase {
         app.launch()
         #if os(macOS)
             app.activate()
+            app.buttons["workspace-documents"].click()
             let gallery = app.scrollViews["record-gallery"]
         #else
             app.buttons["全部记录"].firstMatch.tap()
@@ -98,7 +99,7 @@ final class WeaveUITests: XCTestCase {
         #endif
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         #if os(macOS)
-            app.buttons["workspace-notes"].click()
+            app.buttons["workspace-documents"].click()
         #else
             app.navigationBars.buttons.element(boundBy: 0).tap()
         #endif
@@ -111,8 +112,9 @@ final class WeaveUITests: XCTestCase {
 
     private func newNote() {
         #if os(macOS)
-            // A fresh store exposes the primary action in the empty detail view.
-            let button = app.buttons["empty-new-note"]
+            // Inbox keeps the add action available even when empty.
+            app.buttons["workspace-documents"].click()
+            let button = app.buttons["new-note"]
         #else
             let button = app.buttons["new-note"]
         #endif
@@ -143,7 +145,46 @@ final class WeaveUITests: XCTestCase {
             ).firstMatch
         }
 
-        func testMacCleanWorkspaceAndNoteList() {
+        func testMacHistoryRestoresDocumentAndClearsForwardBranch() {
+            let back = app.buttons["navigation-back"]
+            let forward = app.buttons["navigation-forward"]
+            XCTAssertFalse(back.isEnabled)
+            XCTAssertFalse(forward.isEnabled)
+            newNote()
+            editor.typeText("Keep this document")
+            app.buttons["workspace-settings"].click()
+            XCTAssertTrue(app.popUpButtons["settings-theme"].waitForExistence(timeout: 5))
+            back.click()
+            expectText("Keep this document")
+            back.click()
+            XCTAssertTrue(app.scrollViews["record-gallery"].waitForExistence(timeout: 5))
+            forward.click()
+            expectText("Keep this document")
+            app.buttons["workspace-tasks"].click()
+            XCTAssertFalse(forward.isEnabled)
+        }
+
+        func testMacEnglishSettingsAndThemeSelection() {
+            app.terminate()
+            app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-ApplePersistenceIgnoreState", "YES"]
+            app.launch()
+            app.buttons["workspace-settings"].click()
+            XCTAssertTrue(app.staticTexts["Basics"].waitForExistence(timeout: 5))
+            let theme = app.popUpButtons["settings-theme"]
+            XCTAssertTrue(theme.exists)
+            theme.click()
+            app.menuItems["Dark"].click()
+            XCTAssertEqual(theme.value as? String, "Dark")
+            theme.click()
+            app.menuItems["Light"].click()
+            XCTAssertEqual(theme.value as? String, "Light")
+            XCTAssertTrue(app.popUpButtons["settings-language"].exists)
+        }
+
+        func testMacCleanWorkspaceAndInbox() {
+            XCTAssertFalse(app.scrollViews["record-gallery"].exists)
+            app.buttons["workspace-documents"].click()
+            XCTAssertTrue(app.buttons["documents-inbox"].exists)
             XCTAssertFalse(app.buttons["new-folder"].exists)
             XCTAssertFalse(app.buttons["import-markdown"].exists)
             XCTAssertFalse(app.searchFields.firstMatch.exists)
@@ -155,23 +196,23 @@ final class WeaveUITests: XCTestCase {
             XCTAssertFalse(app.menuButtons["Markdown"].exists)
             XCTAssertFalse(app.menuButtons["textformat"].exists)
             XCTAssertFalse(app.buttons["format-bold"].exists)
+            app.buttons["documents-inbox"].click()
             app.buttons["new-note"].click()
             app.textFields["note-title"].click()
             app.textFields["note-title"].typeText("Second record\n")
             editor.click()
             editor.typeText("Another thought")
-            let firstNote = app.staticTexts.matching(
-                NSPredicate(format: "identifier BEGINSWITH %@ AND value == %@", "sidebar-note-", "First record")
-            ).firstMatch
-            XCTAssertTrue(firstNote.waitForExistence(timeout: 5))
-            firstNote.click()
+            app.buttons["documents-inbox"].click()
+            XCTAssertTrue(recordCard(titled: "First record").waitForExistence(timeout: 5))
+            recordCard(titled: "First record").click()
             expectText("A quick thought")
-            app.buttons["workspace-notes"].click()
+            app.buttons["workspace-documents"].click()
             XCTAssertTrue(app.scrollViews["record-gallery"].waitForExistence(timeout: 5))
             recordCard(titled: "Second record").click()
             expectText("Another thought")
             app.terminate()
             app.launch()
+            app.buttons["workspace-documents"].click()
             recordCard(titled: "First record").click()
             expectText("A quick thought")
         }
@@ -189,12 +230,13 @@ final class WeaveUITests: XCTestCase {
         expectText("A persistent note\nSecond line")
         app.terminate()
         app.launch()
-        // Both workspaces reopen on their library after relaunch.
+        // Reopen the saved document through the platform navigation.
         if !editor.waitForExistence(timeout: 2) {
             #if os(iOS)
                 app.buttons["全部记录"].firstMatch.tap()
                 app.staticTexts[titleText].firstMatch.tap()
             #else
+                app.buttons["workspace-documents"].click()
                 recordCard(titled: titleText).tap()
             #endif
         }

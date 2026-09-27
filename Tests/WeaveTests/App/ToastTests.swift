@@ -40,7 +40,7 @@ struct ToastTests {
         model.writeClipboard = { _ in false }
         model.copyCode()
         #expect(messages.count == 1)
-        #expect(messages.first?.title == "复制失败")
+        #expect(messages.first?.title == L10n.string("复制失败"))
         #expect(model.copyStatus == .failed)
         model.writeClipboard = { _ in true }
         model.copyCode()
@@ -48,7 +48,7 @@ struct ToastTests {
         #expect(model.copyStatus == .copied)
         model.reportFormatFailure(CodeFormatting.Failure.syntax("Unexpected token (2:3)"))
         #expect(messages.count == 2)
-        #expect(messages.last?.title == "格式化失败")
+        #expect(messages.last?.title == L10n.string("格式化失败"))
         #expect(messages.last?.details?.contains("Unexpected token (2:3)") == true)
         #expect(messages.last?.message.contains("原文已保留") == true)
     }
