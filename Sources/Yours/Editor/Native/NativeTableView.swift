@@ -217,7 +217,7 @@ struct TableBlockView: View {
             )
         )
         .textFieldStyle(.plain)
-        .font(Font(NativeTextAttributes.displayFont(Font.body.resolve(in: fontContext).ctFont)).weight(row == 0 ? .semibold : .regular))
+        .font(Font(NativeTextAttributes.displayFont(Font.body.weight(row == 0 ? .semibold : .regular).resolve(in: fontContext).ctFont)))
         .multilineTextAlignment(textAlignment(column))
         .padding(.horizontal, 10)
         .focused($focusedCell, equals: Cell(row: row, column: column))

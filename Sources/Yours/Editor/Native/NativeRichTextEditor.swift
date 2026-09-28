@@ -616,16 +616,21 @@ struct NativeRichTextEditor {
             }
             let originalAttributes = attributes
             let base = (attributes[.font] as? PlatformFont)
+            let originalFont = (attributes[.yoursStoredFont] as? PlatformFont).map { $0 as CTFont }
             let font: Font
             switch edit.style {
             case .heading(let level): font = ParagraphEditing.font(for: "heading:\(level)", context: parent.fontContext)
-            case .bold: font = base.map { Font(NativeTextAttributes.storedFont($0 as CTFont)).bold() } ?? .body.bold()
-            case .italic: font = base.map { Font(NativeTextAttributes.storedFont($0 as CTFont)).italic() } ?? .body.italic()
+            case .bold:
+                font = base.map { Font(NativeTextAttributes.storedFont($0 as CTFont, original: originalFont)).bold() } ?? .body.bold()
+            case .italic:
+                font = base.map { Font(NativeTextAttributes.storedFont($0 as CTFont, original: originalFont)).italic() } ?? .body.italic()
             case .code: font = .body.monospaced()
             case .codeBlock: font = .body.monospaced()
             case .body, .bullet, .quote, .numbered, .task, .strike: font = .body
             }
-            attributes[.font] = NativeTextAttributes.displayFont(font.resolve(in: parent.fontContext).ctFont)
+            NativeTextAttributes.setFont(
+                font.resolve(in: parent.fontContext).ctFont,
+                emphasis: edit.style == .italic ? 2 : edit.style == .bold ? 1 : 0, in: &attributes)
             switch edit.style {
             case .heading(let level):
                 attributes[.yoursInlineEmphasis] = 0
@@ -710,7 +715,10 @@ struct NativeRichTextEditor {
                 let contentRange = NSRange(location: edit.range.location + markerLength, length: edit.replacement.utf16.count)
                 let content = NSMutableAttributedString(attributedString: storage.attributedSubstring(from: contentRange))
                 content.enumerateAttribute(.font, in: NSRange(location: 0, length: content.length)) { value, runRange, _ in
-                    let existing = (value as? PlatformFont).map { Font(NativeTextAttributes.storedFont($0 as CTFont)) } ?? .body
+                    let original = (content.attribute(.yoursStoredFont, at: runRange.location, effectiveRange: nil) as? PlatformFont)
+                        .map { $0 as CTFont }
+                    let existing =
+                        (value as? PlatformFont).map { Font(NativeTextAttributes.storedFont($0 as CTFont, original: original)) } ?? .body
                     let styled: Font =
                         edit.style == .bold
                         ? existing.weight(.bold)
@@ -722,8 +730,13 @@ struct NativeRichTextEditor {
                                     inlineCode: true,
                                     context: parent.fontContext)
                                 : existing
-                    content.addAttribute(
-                        .font, value: NativeTextAttributes.displayFont(styled.resolve(in: parent.fontContext).ctFont), range: runRange)
+                    var fontAttributes: [NSAttributedString.Key: Any] = [:]
+                    NativeTextAttributes.setFont(
+                        styled.resolve(in: parent.fontContext).ctFont,
+                        emphasis: (content.attribute(.yoursInlineEmphasis, at: runRange.location, effectiveRange: nil) as? Int ?? 0)
+                            | (edit.style == .italic ? 2 : edit.style == .bold ? 1 : 0),
+                        in: &fontAttributes)
+                    content.addAttributes(fontAttributes, range: runRange)
                 }
                 if edit.style == .bold || edit.style == .italic {
                     let flag = edit.style == .bold ? 1 : 2
@@ -811,6 +824,9 @@ struct NativeRichTextEditor {
                 updated.addAttribute(.yoursParagraphStyle, value: "body", range: affected)
                 if let bodyFont = attributes[.font] {
                     updated.addAttribute(.font, value: bodyFont, range: affected)
+                    if let original = attributes[.yoursStoredFont] {
+                        updated.addAttribute(.yoursStoredFont, value: original, range: affected)
+                    }
                 }
             }
             let nextAttributes: [NSAttributedString.Key: Any]
@@ -975,8 +991,9 @@ struct NativeRichTextEditor {
             if resetStrike { attributes.removeValue(forKey: .strikethroughStyle) }
             if resetUnderline { attributes.removeValue(forKey: .underlineStyle) }
             if resetLink { attributes.removeValue(forKey: .link) }
-            attributes[.font] = NativeTextAttributes.displayFont(
-                DocumentTypography.font(for: role, emphasis: emphasis, context: parent.fontContext).resolve(in: parent.fontContext).ctFont
+            NativeTextAttributes.setFont(
+                DocumentTypography.font(for: role, emphasis: emphasis, context: parent.fontContext).resolve(in: parent.fontContext).ctFont,
+                emphasis: emphasis, in: &attributes
             )
             pendingTypingAttributesAfterInlineDeletion = attributes
         }

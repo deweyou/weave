@@ -24,7 +24,7 @@ struct RecordGallery<Card: View>: View {
         NativeRecordGallery(
             notes: notes, scrollState: scrollState, resetGeneration: scrollState.resetGeneration,
             typography: RecordCardTypography(
-                title: Font.headline.resolve(in: fontContext), summary: Font.subheadline.resolve(in: fontContext),
+                title: TitleTypography.card(in: fontContext).resolve(in: fontContext), summary: Font.subheadline.resolve(in: fontContext),
                 caption: Font.caption.resolve(in: fontContext), minimumHeight: minimumHeight, maximumHeight: maximumHeight),
             colorScheme: environment.colorScheme
         ) { note in

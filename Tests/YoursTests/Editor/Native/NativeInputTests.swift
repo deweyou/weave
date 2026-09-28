@@ -652,6 +652,31 @@
             #expect(view.string == "中文🌿")
             view.insertText("后文", replacementRange: view.selectedRange())
             #expect(view.string == "中文🌿后文")
+            let context = EnvironmentValues().fontResolutionContext
+            let tail = "中文🌿".utf16.count
+            let display = try #require(view.textStorage?.attribute(.font, at: tail, effectiveRange: nil) as? NSFont)
+            #expect(display.fontName == BundledSerifFont.regularName)
+            let restored = NativeTextAttributes.rich(try #require(view.textStorage))
+            let range = try #require(restored.range(of: "后文"))
+            let stored = try #require(restored[range].font).resolve(in: context)
+            #expect(stored.isMonospaced == false)
+            #expect(stored.isBold == false)
+            #expect(stored.isItalic == false)
+            #expect(CTFontCopyPostScriptName(stored.ctFont) as String != BundledSerifFont.regularName)
+        }
+
+        @Test func emptyDocumentTypesInSerifAndStoresSystemBody() throws {
+            let (view, coordinator) = editor(AttributedString())
+            view.delegate = coordinator
+            coordinator.update(coordinator.parent)
+            let font = try #require(view.typingAttributes[.font] as? NSFont)
+            #expect(font.fontName == BundledSerifFont.regularName)
+            view.insertText("中文🌿", replacementRange: view.selectedRange())
+            let rich = NativeTextAttributes.rich(try #require(view.textStorage))
+            let context = EnvironmentValues().fontResolutionContext
+            let stored = try #require(rich.font).resolve(in: context).ctFont
+            #expect(CTFontCopyFamilyName(stored) == CTFontCopyFamilyName(Font.body.resolve(in: context).ctFont))
+            #expect(abs(CTFontGetSize(stored) - CTFontGetSize(Font.body.resolve(in: context).ctFont)) < 0.001)
         }
 
         private func editor(_ source: AttributedString) -> (NSTextView, NativeRichTextEditor.Coordinator) {

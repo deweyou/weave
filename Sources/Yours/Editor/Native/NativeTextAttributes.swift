@@ -28,6 +28,7 @@ struct NoteAttributeScope: AttributeScope {
 }
 
 extension NSAttributedString.Key {
+    static let yoursStoredFont = NSAttributedString.Key("yours.storedFont")
     static let yoursInlineEmphasis = NSAttributedString.Key(InlineEmphasisAttribute.name)
     static let yoursTable = NSAttributedString.Key(TableAttribute.name)
     static let yoursCodeLanguage = NSAttributedString.Key(CodeLanguageAttribute.name)
@@ -1504,12 +1505,38 @@ enum NativeTextAttributes {
     // Display scaling is reversible; stored font sizes remain independent of the reading layout.
     static let readingScale = DocumentTypography.readingScale
 
-    static func displayFont(_ font: CTFont) -> CTFont {
-        CTFontCreateCopyWithAttributes(font, CTFontGetSize(font) * readingScale, nil, nil)
+    private static let systemChineseFamilies: Set<String> = Set(
+        ["zh-Hans", "zh-Hant", "zh-HK"].compactMap { language in
+            guard let system = CTFontCreateUIFontForLanguage(.system, 13, language as CFString) else { return nil }
+            let fallback = CTFontCreateForString(system, "中文" as CFString, CFRange(location: 0, length: 2))
+            return CTFontCopyFamilyName(fallback) as String
+        })
+
+    static func displayFont(_ font: CTFont, emphasis: Int = 0) -> CTFont {
+        let size = CTFontGetSize(font) * readingScale
+        let system = PlatformFont.systemFont(ofSize: CTFontGetSize(font)) as CTFont
+        let traits = CTFontGetSymbolicTraits(font)
+        let family = CTFontCopyFamilyName(font) as String
+        let isSystem = family == CTFontCopyFamilyName(system) as String || systemChineseFamilies.contains(family)
+        guard !traits.contains(.traitMonoSpace), isSystem, BundledSerifFont.isRegistered
+        else { return CTFontCreateCopyWithAttributes(font, size, nil, nil) }
+        let name = traits.contains(.traitBold) || emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.regularName
+        // Source Han Serif has no italic face. Apply a display-only oblique matrix;
+        // the original system font retains its italic and weight semantics for storage.
+        var matrix =
+            traits.contains(.traitItalic) || emphasis & 2 != 0 ? CGAffineTransform(a: 1, b: 0, c: 0.2, d: 1, tx: 0, ty: 0) : .identity
+        return CTFontCreateWithName(name as CFString, size, &matrix)
     }
 
-    static func storedFont(_ font: CTFont) -> CTFont {
-        CTFontCreateCopyWithAttributes(font, CTFontGetSize(font) / readingScale, nil, nil)
+    static func storedFont(_ font: CTFont, original: CTFont? = nil) -> CTFont {
+        CTFontCreateCopyWithAttributes(original ?? font, CTFontGetSize(font) / readingScale, nil, nil)
+    }
+
+    static func setFont(_ font: CTFont, emphasis: Int = 0, in attributes: inout [NSAttributedString.Key: Any]) {
+        attributes[.font] = displayFont(font, emphasis: emphasis)
+        // This native-only attribute travels with typing, undo and copied spans.
+        // It is deliberately absent from NoteAttributeScope and removed by rich().
+        attributes[.yoursStoredFont] = font
     }
 
     static func stableLineHeight(for font: PlatformFont) -> CGFloat {
@@ -1759,7 +1786,7 @@ enum NativeTextAttributes {
                 ? DocumentTypography.font(
                     for: role, emphasis: emphasis, inlineCode: run[CodeStyleAttribute.self] == "inline", context: context)
                 : run.font ?? .body
-            attributes[.font] = displayFont(font.resolve(in: context).ctFont)
+            setFont(font.resolve(in: context).ctFont, emphasis: emphasis, in: &attributes)
             attributes[.yoursInlineEmphasis] = emphasis
             if let style = run[ParagraphStyleAttribute.self] { attributes[.yoursParagraphStyle] = style }
             if run[QuoteAttribute.self] == true { attributes[.yoursQuote] = true }
@@ -1897,7 +1924,10 @@ enum NativeTextAttributes {
             if let marker = attributes[.yoursListMarker] as? String { result[range][ListMarkerAttribute.self] = marker }
             if let checked = attributes[.yoursTaskChecked] as? Bool { result[range][TaskStateAttribute.self] = checked }
             if let style = attributes[.yoursCodeStyle] as? String { result[range][CodeStyleAttribute.self] = style }
-            if let font = attributes[.font] as? PlatformFont { result[range].font = Font(storedFont(font as CTFont)) }
+            if let font = attributes[.font] as? PlatformFont {
+                let original = (attributes[.yoursStoredFont] as? PlatformFont).map { $0 as CTFont }
+                result[range].font = Font(storedFont(font as CTFont, original: original))
+            }
             if let link = attributes[.link] as? URL {
                 result[range].link = link
             } else if let link = attributes[.link] as? String {

@@ -20,6 +20,7 @@ struct WorkspaceView: View {
 
 struct RecordCard: View {
     let note: Note
+    @Environment(\.fontResolutionContext) private var fontContext
     #if os(macOS)
         @ScaledMetric private var minimumHeight = 120.0
         @ScaledMetric private var maximumHeight = 320.0
@@ -33,7 +34,7 @@ struct RecordCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 8) {
-                Text(note.displayTitle).font(.headline).lineLimit(2).layoutPriority(1)
+                Text(note.displayTitle).font(TitleTypography.card(in: fontContext)).lineLimit(2).layoutPriority(1)
                 Spacer(minLength: 0)
             }
             Text(note.text.isEmpty ? L10n.string("note.body.empty") : String(note.text.prefix(600)))
@@ -100,7 +101,7 @@ struct NoteEditorView: View {
                     }
                 ), axis: .vertical
             )
-            .font(.system(size: DocumentTypography.titleSize, weight: .semibold))
+            .font(TitleTypography.document)
             .lineSpacing(DocumentTypography.titleLineSpacing)
             .lineLimit(1...4)
             .textFieldStyle(.plain)
