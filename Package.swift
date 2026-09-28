@@ -9,7 +9,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Yours",
-            resources: [.copy("Resources/CodeFormatting"), .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj")]),
+            resources: [
+                .copy("Resources/CodeFormatting"), .copy("Resources/Fonts"), .process("Resources/en.lproj"),
+                .process("Resources/zh-Hans.lproj"),
+            ]),
         .testTarget(name: "YoursTests", dependencies: ["Yours"]),
     ]
 )

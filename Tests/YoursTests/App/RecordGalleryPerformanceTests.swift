@@ -10,7 +10,7 @@ struct RecordGalleryPerformanceTests {
     private var typography: RecordCardTypography {
         let context = EnvironmentValues().fontResolutionContext
         return RecordCardTypography(
-            title: Font.headline.resolve(in: context), summary: Font.subheadline.resolve(in: context),
+            title: TitleTypography.card(in: context).resolve(in: context), summary: Font.subheadline.resolve(in: context),
             caption: Font.caption.resolve(in: context), minimumHeight: 120, maximumHeight: 320)
     }
 
@@ -182,10 +182,11 @@ struct RecordGalleryPerformanceTests {
         }
     }
 
-    @Test func cachedTextHeightMatchesCardContent() {
+    @Test(arguments: ["A card title", "把日常写成自己的故事：中文与 English 2026 👋，这是需要跨行显示的长标题"])
+    func cachedTextHeightMatchesCardContent(title: String) {
         _ = NSApplication.shared
         for text in ["Short", String(repeating: "中文与 emoji 👋 English text. ", count: 8), String(repeating: "Line\n", count: 40)] {
-            let note = Note(id: UUID(), text: text, createdAt: .distantPast, updatedAt: .distantPast, title: "A card title")
+            let note = Note(id: UUID(), text: text, createdAt: .distantPast, updatedAt: .distantPast, title: title)
             let host = NSHostingController(rootView: RecordCard(note: note).fixedSize(horizontal: false, vertical: true))
             for width: CGFloat in [160, 220, 340] {
                 let actual = host.sizeThatFits(in: CGSize(width: width, height: 1000)).height

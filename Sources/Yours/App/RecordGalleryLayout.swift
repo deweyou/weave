@@ -114,7 +114,9 @@ struct RecordCardTypography: Equatable {
         let setter = CTFramesetterCreateWithAttributedString(attributed)
         let size = CTFramesetterSuggestFrameSizeWithConstraints(
             setter, CFRange(location: 0, length: 0), nil,
-            CGSize(width: width, height: lineHeight * CGFloat(lines)), nil)
+            // Measure before capping: a fallback glyph can make the last line
+            // slightly taller, causing a height-constrained frame to omit it entirely.
+            CGSize(width: width, height: .greatestFiniteMagnitude), nil)
         return min(lineHeight * CGFloat(lines), max(lineHeight, ceil(size.height)))
     }
 }

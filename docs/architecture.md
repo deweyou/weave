@@ -8,6 +8,7 @@
 | --- | --- |
 | `Sources/Yours/App/ToastPresenter.swift` | 页面级短暂反馈消息、替换与关闭状态 |
 | `Sources/Yours/App/Toast.swift` | Liquid Glass 反馈浮层；生命周期由 SwiftUI task 管理 |
+| `Sources/Yours/App/TitleTypography.swift` | 内置文档七档字重注册、标题语义字号与显示/测量共用字体；不进入持久化 |
 | `Sources/Yours/App/AppTheme.swift` | SwiftUI 与原生绘制共用的主题色，默认系统蓝；不属于文档持久化属性 |
 | `Sources/Yours/App/YoursApp.swift` | 生命周期、存储实例、Mac 新建命令 |
 | `Sources/Yours/App/NativeRecordGallery.swift` | NSCollectionView / UICollectionView 复用、SwiftUI 卡片宿主与滚动恢复 |
@@ -113,3 +114,11 @@ Mac 精简工作区不再持有分类、搜索与导入状态；左栏直接绑�
 `Resources/zh-Hans.lproj` 和 `Resources/en.lproj` 维护同键 Localizable.strings，并注册到 Xcode 与 Swift Package。所有资源键使用稳定的英文语义标识（如 `note.create`、`settings.title`），不以中英文显示文案作为 key。SwiftUI 静态文案直接传入语义 key 并使用 locale 环境；原生菜单和错误通过 `L10n.string` 读取活动语言资源。带参数文案集中在 `L10n` 的具名方法中，通过显式 key 和 `defaultValue` 的类型化插值解析；中文 defaultValue 仅提供参数及缺失资源时的回退，不是查询 key。字符数和记录数的 `.stringsdict` 使用相同语义 key，保留英文单复数规则。独立宿主的表格和代码操作栏显式注入 locale。用户内容不作为本地化 key；带参数的提示整体翻译，避免拼接句子。添加文案时同步两份资源并检查参数类型与顺序。
 
 MacWorkspaceNavigation 以页面和可选文档 UUID 为访问位置，通过 select/openNote/createNote 统一推进历史；后退与前进直接切换历史位置，避免再次入栈。历史属于窗口内存状态，不写入笔记存储。
+
+文档字体资源位于 `Resources/Fonts`，Swift Package 与 Xcode target 都复制整个目录及 OFL 许可证。`BundledSerifFont` 首次使用时通过 Core Text 注册完整七档字重到当前进程，缺失或注册失败会记录诊断并回退系统标题字体；原始版本、来源与 SHA-256 见该目录 README。独立标题按 `DocumentTypography.titleSize` 使用 SemiBold 显示，卡片按当前平台 headline 解析字号后使用 Medium供显示和高度测量，保持字号变化时缓存失效。
+
+非代码系统字族及系统中文 UI 回退字族在 `NativeTextAttributes.displayFont` 中投影到思源宋体，保留原字号倍率；等宽与显式自定义字族跳过 family 替换。中文 UI 回退字族通过公开 Core Text API 按简体、繁体、香港语言解析；不将公开的自定义 PingFang 字族一并替换。旧中文斜体可能只保存独立强调标志，显示时同时读取该标志与原字体 traits。`setFont` 将投影前 CTFont 保存在临时原生属性 `yoursStoredFont`，`rich` / `storedFont` 恢复原字体、字重与斜体；该属性不属于 `NoteAttributeScope`。输入属性、快捷格式、删除恢复及撤销快照必须同时维护显示字体与原字体，避免把已显示的宋体写回笔记。章节标题根据段落角色显示 SemiBold，显式加粗强调仍显示 Bold，原存储字重保持；斜体通过显示矩阵呈现，各字重使用同版本真实字体；表头在投影前选择字重。旧笔记无需迁移，卡片摘要与操作界面不受此映射影响。
+
+_Last updated: 2026-09-28 — 记录正文显示字体的可逆桥接与资源边界。_
+
+`AppTheme.documentBody` / `documentHeading` 为按外观与对比度解析的原生动态颜色，供 SwiftUI 标题、表格和原生正文共用。`NativeTextAttributes.rich` 排除这些默认显示色，段落角色切换重新选择默认色；显式自定义颜色不参与主题投影。

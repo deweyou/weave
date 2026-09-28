@@ -28,6 +28,7 @@ struct NoteAttributeScope: AttributeScope {
 }
 
 extension NSAttributedString.Key {
+    static let yoursStoredFont = NSAttributedString.Key("yours.storedFont")
     static let yoursInlineEmphasis = NSAttributedString.Key(InlineEmphasisAttribute.name)
     static let yoursTable = NSAttributedString.Key(TableAttribute.name)
     static let yoursCodeLanguage = NSAttributedString.Key(CodeLanguageAttribute.name)
@@ -1504,12 +1505,43 @@ enum NativeTextAttributes {
     // Display scaling is reversible; stored font sizes remain independent of the reading layout.
     static let readingScale = DocumentTypography.readingScale
 
-    static func displayFont(_ font: CTFont) -> CTFont {
-        CTFontCreateCopyWithAttributes(font, CTFontGetSize(font) * readingScale, nil, nil)
+    private static let systemChineseFamilies: Set<String> = Set(
+        ["zh-Hans", "zh-Hant", "zh-HK"].compactMap { language in
+            guard let system = CTFontCreateUIFontForLanguage(.system, 13, language as CFString) else { return nil }
+            let fallback = CTFontCreateForString(system, "中文" as CFString, CFRange(location: 0, length: 2))
+            return CTFontCopyFamilyName(fallback) as String
+        })
+
+    static func displayFont(_ font: CTFont, emphasis: Int = 0, role: String = "body") -> CTFont {
+        let size = CTFontGetSize(font) * readingScale
+        let system = PlatformFont.systemFont(ofSize: CTFontGetSize(font)) as CTFont
+        let traits = CTFontGetSymbolicTraits(font)
+        let family = CTFontCopyFamilyName(font) as String
+        let isSystem = family == CTFontCopyFamilyName(system) as String || systemChineseFamilies.contains(family)
+        guard !traits.contains(.traitMonoSpace), isSystem, BundledSerifFont.isRegistered
+        else { return CTFontCreateCopyWithAttributes(font, size, nil, nil) }
+        let name: String
+        if role.hasPrefix("heading:") {
+            name = emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.semiboldName
+        } else {
+            name = traits.contains(.traitBold) || emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.regularName
+        }
+        // Source Han Serif has no italic face. Apply a display-only oblique matrix;
+        // the original system font retains its italic and weight semantics for storage.
+        var matrix =
+            traits.contains(.traitItalic) || emphasis & 2 != 0 ? CGAffineTransform(a: 1, b: 0, c: 0.2, d: 1, tx: 0, ty: 0) : .identity
+        return CTFontCreateWithName(name as CFString, size, &matrix)
     }
 
-    static func storedFont(_ font: CTFont) -> CTFont {
-        CTFontCreateCopyWithAttributes(font, CTFontGetSize(font) / readingScale, nil, nil)
+    static func storedFont(_ font: CTFont, original: CTFont? = nil) -> CTFont {
+        CTFontCreateCopyWithAttributes(original ?? font, CTFontGetSize(font) / readingScale, nil, nil)
+    }
+
+    static func setFont(_ font: CTFont, emphasis: Int = 0, role: String = "body", in attributes: inout [NSAttributedString.Key: Any]) {
+        attributes[.font] = displayFont(font, emphasis: emphasis, role: role)
+        // This native-only attribute travels with typing, undo and copied spans.
+        // It is deliberately absent from NoteAttributeScope and removed by rich().
+        attributes[.yoursStoredFont] = font
     }
 
     static func stableLineHeight(for font: PlatformFont) -> CGFloat {
@@ -1621,9 +1653,9 @@ enum NativeTextAttributes {
         text.enumerateAttribute(.yoursQuoteColor, in: region) { value, range, _ in
             guard value != nil else { return }
             #if os(macOS)
-                text.addAttribute(.foregroundColor, value: NSColor.textColor, range: range)
+                text.addAttribute(.foregroundColor, value: AppTheme.documentBody, range: range)
             #else
-                text.addAttribute(.foregroundColor, value: UIColor.label, range: range)
+                text.addAttribute(.foregroundColor, value: AppTheme.documentBody, range: range)
             #endif
         }
         text.removeAttribute(.yoursQuoteColor, range: region)
@@ -1655,6 +1687,13 @@ enum NativeTextAttributes {
             paragraph.lineSpacing = DocumentTypography.bodyLineSpacing
             paragraph.paragraphSpacing = DocumentTypography.bodyParagraphSpacing
             let role = text.attribute(.yoursParagraphStyle, at: location, effectiveRange: nil) as? String ?? "body"
+            text.enumerateAttributes(in: range) { attributes, colorRange, _ in
+                guard attributes[.yoursSyntaxColor] == nil,
+                    let color = attributes[.foregroundColor] as? AppTheme.NativeColor,
+                    AppTheme.isDefaultDocumentColor(color)
+                else { return }
+                text.addAttribute(.foregroundColor, value: AppTheme.documentText(for: role), range: colorRange)
+            }
             let quoted =
                 text.attribute(.yoursQuote, at: location, effectiveRange: nil) as? Bool == true
                 || role == "quote" || content.hasPrefix("│ ")
@@ -1712,10 +1751,10 @@ enum NativeTextAttributes {
                 if !structured { paragraph.paragraphSpacing = DocumentTypography.quoteSpacing }
                 text.enumerateAttribute(.foregroundColor, in: range) { value, colorRange, _ in
                     #if os(macOS)
-                        guard value == nil || value as? NSColor == NSColor.textColor else { return }
+                        guard value == nil || (value as? NSColor).map(AppTheme.isDefaultDocumentColor) == true else { return }
                         text.addAttributes([.foregroundColor: NSColor.secondaryLabelColor, .yoursQuoteColor: true], range: colorRange)
                     #else
-                        guard value == nil || value as? UIColor == UIColor.label else { return }
+                        guard value == nil || (value as? UIColor).map(AppTheme.isDefaultDocumentColor) == true else { return }
                         text.addAttributes([.foregroundColor: UIColor.secondaryLabel, .yoursQuoteColor: true], range: colorRange)
                     #endif
                 }
@@ -1759,7 +1798,7 @@ enum NativeTextAttributes {
                 ? DocumentTypography.font(
                     for: role, emphasis: emphasis, inlineCode: run[CodeStyleAttribute.self] == "inline", context: context)
                 : run.font ?? .body
-            attributes[.font] = displayFont(font.resolve(in: context).ctFont)
+            setFont(font.resolve(in: context).ctFont, emphasis: emphasis, role: role, in: &attributes)
             attributes[.yoursInlineEmphasis] = emphasis
             if let style = run[ParagraphStyleAttribute.self] { attributes[.yoursParagraphStyle] = style }
             if run[QuoteAttribute.self] == true { attributes[.yoursQuote] = true }
@@ -1784,7 +1823,7 @@ enum NativeTextAttributes {
                     attributes[.foregroundColor] = NSColor.secondaryLabelColor
                     attributes[.yoursQuoteColor] = true
                 } else {
-                    attributes[.foregroundColor] = run.foregroundColor.map(NSColor.init) ?? NSColor.textColor
+                    attributes[.foregroundColor] = run.foregroundColor.map(NSColor.init) ?? AppTheme.documentText(for: role)
                 }
                 if let color = run.backgroundColor { attributes[.backgroundColor] = NSColor(color) }
             #else
@@ -1792,7 +1831,7 @@ enum NativeTextAttributes {
                     attributes[.foregroundColor] = UIColor.secondaryLabel
                     attributes[.yoursQuoteColor] = true
                 } else {
-                    attributes[.foregroundColor] = run.foregroundColor.map(UIColor.init) ?? UIColor.label
+                    attributes[.foregroundColor] = run.foregroundColor.map(UIColor.init) ?? AppTheme.documentText(for: role)
                 }
                 if let color = run.backgroundColor { attributes[.backgroundColor] = UIColor(color) }
             #endif
@@ -1897,7 +1936,10 @@ enum NativeTextAttributes {
             if let marker = attributes[.yoursListMarker] as? String { result[range][ListMarkerAttribute.self] = marker }
             if let checked = attributes[.yoursTaskChecked] as? Bool { result[range][TaskStateAttribute.self] = checked }
             if let style = attributes[.yoursCodeStyle] as? String { result[range][CodeStyleAttribute.self] = style }
-            if let font = attributes[.font] as? PlatformFont { result[range].font = Font(storedFont(font as CTFont)) }
+            if let font = attributes[.font] as? PlatformFont {
+                let original = (attributes[.yoursStoredFont] as? PlatformFont).map { $0 as CTFont }
+                result[range].font = Font(storedFont(font as CTFont, original: original))
+            }
             if let link = attributes[.link] as? URL {
                 result[range].link = link
             } else if let link = attributes[.link] as? String {
@@ -1906,14 +1948,14 @@ enum NativeTextAttributes {
             if let style = attributes[.underlineStyle] as? Int, style != 0 { result[range].underlineStyle = .single }
             if let style = attributes[.strikethroughStyle] as? Int, style != 0 { result[range].strikethroughStyle = .single }
             #if os(macOS)
-                if let color = attributes[.foregroundColor] as? NSColor, color != .textColor, color != .clear,
+                if let color = attributes[.foregroundColor] as? NSColor, !AppTheme.isDefaultDocumentColor(color), color != .clear,
                     attributes[.yoursSyntaxColor] == nil, attributes[.yoursQuoteColor] == nil
                 {
                     result[range].foregroundColor = Color(nsColor: color)
                 }
                 if let color = attributes[.backgroundColor] as? NSColor { result[range].backgroundColor = Color(nsColor: color) }
             #else
-                if let color = attributes[.foregroundColor] as? UIColor, color != .label, color != .clear,
+                if let color = attributes[.foregroundColor] as? UIColor, !AppTheme.isDefaultDocumentColor(color), color != .clear,
                     attributes[.yoursSyntaxColor] == nil, attributes[.yoursQuoteColor] == nil
                 {
                     result[range].foregroundColor = Color(uiColor: color)
