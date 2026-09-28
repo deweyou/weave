@@ -628,9 +628,17 @@ struct NativeRichTextEditor {
             case .codeBlock: font = .body.monospaced()
             case .body, .bullet, .quote, .numbered, .task, .strike: font = .body
             }
+            let displayRole: String
+            switch edit.style {
+            case .heading(let level): displayRole = "heading:\(level)"
+            case .bold, .italic: displayRole = attributes[.yoursParagraphStyle] as? String ?? "body"
+            default: displayRole = "body"
+            }
             NativeTextAttributes.setFont(
                 font.resolve(in: parent.fontContext).ctFont,
-                emphasis: edit.style == .italic ? 2 : edit.style == .bold ? 1 : 0, in: &attributes)
+                emphasis: edit.style == .italic ? 2 : edit.style == .bold ? 1 : 0,
+                role: displayRole,
+                in: &attributes)
             switch edit.style {
             case .heading(let level):
                 attributes[.yoursInlineEmphasis] = 0
@@ -735,6 +743,7 @@ struct NativeRichTextEditor {
                         styled.resolve(in: parent.fontContext).ctFont,
                         emphasis: (content.attribute(.yoursInlineEmphasis, at: runRange.location, effectiveRange: nil) as? Int ?? 0)
                             | (edit.style == .italic ? 2 : edit.style == .bold ? 1 : 0),
+                        role: content.attribute(.yoursParagraphStyle, at: runRange.location, effectiveRange: nil) as? String ?? "body",
                         in: &fontAttributes)
                     content.addAttributes(fontAttributes, range: runRange)
                 }
@@ -993,7 +1002,7 @@ struct NativeRichTextEditor {
             if resetLink { attributes.removeValue(forKey: .link) }
             NativeTextAttributes.setFont(
                 DocumentTypography.font(for: role, emphasis: emphasis, context: parent.fontContext).resolve(in: parent.fontContext).ctFont,
-                emphasis: emphasis, in: &attributes
+                emphasis: emphasis, role: role, in: &attributes
             )
             pendingTypingAttributesAfterInlineDeletion = attributes
         }

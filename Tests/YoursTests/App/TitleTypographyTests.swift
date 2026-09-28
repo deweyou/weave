@@ -10,11 +10,15 @@ struct TitleTypographyTests {
         try #require(TitleTypography.isRegistered)
         let context = EnvironmentValues().fontResolutionContext
         let font = TitleTypography.document.resolve(in: context).ctFont
-        #expect(CTFontCopyPostScriptName(font) as String == BundledSerifFont.boldName)
+        #expect(CTFontCopyPostScriptName(font) as String == BundledSerifFont.semiboldName)
         #expect(CTFontGetSize(font) == DocumentTypography.titleSize)
         let characters = Array("思源宋体，记录生活。Yours 2026!?".utf16)
         var glyphs = Array(repeating: CGGlyph(0), count: characters.count)
-        #expect(CTFontGetGlyphsForCharacters(font, characters, &glyphs, characters.count))
+        for name in BundledSerifFont.allNames {
+            let face = CTFontCreateWithName(name as CFString, 18, nil)
+            #expect(CTFontCopyPostScriptName(face) as String == name)
+            #expect(CTFontGetGlyphsForCharacters(face, characters, &glyphs, characters.count))
+        }
         let license = try #require(
             TitleTypography.resourceBundle.url(forResource: "SourceHanSerif-LICENSE", withExtension: "txt", subdirectory: "Fonts"))
         #expect(try String(contentsOf: license, encoding: .utf8).contains("SIL OPEN FONT LICENSE"))
@@ -26,7 +30,7 @@ struct TitleTypographyTests {
         environment.dynamicTypeSize = size
         let context = environment.fontResolutionContext
         let font = TitleTypography.card(in: context).resolve(in: context).ctFont
-        #expect(CTFontCopyPostScriptName(font) as String == TitleTypography.postScriptName)
+        #expect(CTFontCopyPostScriptName(font) as String == BundledSerifFont.mediumName)
         #expect(CTFontGetSize(font) == CTFontGetSize(Font.headline.resolve(in: context).ctFont))
         #expect(CTFontCopyPostScriptName(Font.body.resolve(in: context).ctFont) as String != TitleTypography.postScriptName)
     }

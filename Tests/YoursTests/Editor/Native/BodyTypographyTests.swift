@@ -6,7 +6,9 @@ import Testing
 
 @MainActor
 struct BodyTypographyTests {
-    @Test(arguments: ["body", "heading:1", "heading:6", "bullet", "task", "quote"], [0, 1, 2, 3])
+    @Test(
+        arguments: ["body", "heading:1", "heading:2", "heading:3", "heading:4", "heading:5", "heading:6", "bullet", "task", "quote"],
+        [0, 1, 2, 3])
     func displayProjectionPreservesStoredFontAndEmphasis(role: String, emphasis: Int) throws {
         let context = EnvironmentValues().fontResolutionContext
         var text = AttributedString("中文 English 2026 👋")
@@ -17,8 +19,11 @@ struct BodyTypographyTests {
         for _ in 0..<3 {
             let native = NativeTextAttributes.native(text, context: context)
             let display = try #require(native.attribute(.font, at: 0, effectiveRange: nil) as? PlatformFont) as CTFont
-            let bold = CTFontGetSymbolicTraits(original).contains(.traitBold)
-            #expect(CTFontCopyPostScriptName(display) as String == (bold ? BundledSerifFont.boldName : BundledSerifFont.regularName))
+            let expectedName =
+                role.hasPrefix("heading:")
+                ? (emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.semiboldName)
+                : (emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.regularName)
+            #expect(CTFontCopyPostScriptName(display) as String == expectedName)
             #expect(abs(CTFontGetSize(display) - CTFontGetSize(original) * DocumentTypography.readingScale) < 0.001)
             #expect((CTFontGetMatrix(display).c != 0) == (emphasis & 2 != 0))
             text = NativeTextAttributes.rich(native)

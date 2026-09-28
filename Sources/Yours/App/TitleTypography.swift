@@ -4,13 +4,13 @@ import SwiftUI
 
 /// Presentation-only fonts for note identity; never applied to stored rich text.
 enum TitleTypography {
-    static let postScriptName = BundledSerifFont.regularName
+    static let postScriptName = BundledSerifFont.mediumName
     static var isRegistered: Bool { BundledSerifFont.isRegistered }
     static var resourceBundle: Bundle { BundledSerifFont.resourceBundle }
 
     static var document: Font {
-        guard isRegistered else { return .system(size: DocumentTypography.titleSize, weight: .bold) }
-        return .custom(BundledSerifFont.boldName, fixedSize: DocumentTypography.titleSize)
+        guard isRegistered else { return .system(size: DocumentTypography.titleSize, weight: .semibold) }
+        return .custom(BundledSerifFont.semiboldName, fixedSize: DocumentTypography.titleSize)
     }
 
     static func card(in context: Font.Context) -> Font {
@@ -25,8 +25,15 @@ enum TitleTypography {
 
 /// Bundled document faces are registered only in this process, never installed system-wide.
 enum BundledSerifFont {
+    static let extraLightName = "SourceHanSerifCN-ExtraLight"
+    static let lightName = "SourceHanSerifCN-Light"
+    static let mediumName = "SourceHanSerifCN-Medium"
+    static let semiboldName = "SourceHanSerifCN-SemiBold"
+    static let heavyName = "SourceHanSerifCN-Heavy"
     static let regularName = "SourceHanSerifCN-Regular"
     static let boldName = "SourceHanSerifCN-Bold"
+
+    static let allNames = [extraLightName, lightName, regularName, mediumName, semiboldName, boldName, heavyName]
 
     static var resourceBundle: Bundle {
         #if SWIFT_PACKAGE
@@ -40,7 +47,7 @@ enum BundledSerifFont {
     // Process scope avoids installing or modifying the user's system fonts.
     static let isRegistered: Bool = {
         let logger = Logger(subsystem: "app.yours.editor", category: "BundledSerifFont")
-        for name in [regularName, boldName] {
+        for name in allNames {
             guard let url = resourceBundle.url(forResource: name, withExtension: "otf", subdirectory: "Fonts") else {
                 logger.error("Bundled document font is missing; using the system font.")
                 return false

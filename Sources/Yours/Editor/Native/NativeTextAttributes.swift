@@ -1512,7 +1512,7 @@ enum NativeTextAttributes {
             return CTFontCopyFamilyName(fallback) as String
         })
 
-    static func displayFont(_ font: CTFont, emphasis: Int = 0) -> CTFont {
+    static func displayFont(_ font: CTFont, emphasis: Int = 0, role: String = "body") -> CTFont {
         let size = CTFontGetSize(font) * readingScale
         let system = PlatformFont.systemFont(ofSize: CTFontGetSize(font)) as CTFont
         let traits = CTFontGetSymbolicTraits(font)
@@ -1520,7 +1520,12 @@ enum NativeTextAttributes {
         let isSystem = family == CTFontCopyFamilyName(system) as String || systemChineseFamilies.contains(family)
         guard !traits.contains(.traitMonoSpace), isSystem, BundledSerifFont.isRegistered
         else { return CTFontCreateCopyWithAttributes(font, size, nil, nil) }
-        let name = traits.contains(.traitBold) || emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.regularName
+        let name: String
+        if role.hasPrefix("heading:") {
+            name = emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.semiboldName
+        } else {
+            name = traits.contains(.traitBold) || emphasis & 1 != 0 ? BundledSerifFont.boldName : BundledSerifFont.regularName
+        }
         // Source Han Serif has no italic face. Apply a display-only oblique matrix;
         // the original system font retains its italic and weight semantics for storage.
         var matrix =
@@ -1532,8 +1537,8 @@ enum NativeTextAttributes {
         CTFontCreateCopyWithAttributes(original ?? font, CTFontGetSize(font) / readingScale, nil, nil)
     }
 
-    static func setFont(_ font: CTFont, emphasis: Int = 0, in attributes: inout [NSAttributedString.Key: Any]) {
-        attributes[.font] = displayFont(font, emphasis: emphasis)
+    static func setFont(_ font: CTFont, emphasis: Int = 0, role: String = "body", in attributes: inout [NSAttributedString.Key: Any]) {
+        attributes[.font] = displayFont(font, emphasis: emphasis, role: role)
         // This native-only attribute travels with typing, undo and copied spans.
         // It is deliberately absent from NoteAttributeScope and removed by rich().
         attributes[.yoursStoredFont] = font
@@ -1786,7 +1791,7 @@ enum NativeTextAttributes {
                 ? DocumentTypography.font(
                     for: role, emphasis: emphasis, inlineCode: run[CodeStyleAttribute.self] == "inline", context: context)
                 : run.font ?? .body
-            setFont(font.resolve(in: context).ctFont, emphasis: emphasis, in: &attributes)
+            setFont(font.resolve(in: context).ctFont, emphasis: emphasis, role: role, in: &attributes)
             attributes[.yoursInlineEmphasis] = emphasis
             if let style = run[ParagraphStyleAttribute.self] { attributes[.yoursParagraphStyle] = style }
             if run[QuoteAttribute.self] == true { attributes[.yoursQuote] = true }
