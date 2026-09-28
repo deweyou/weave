@@ -4,6 +4,10 @@ import Testing
 
 @testable import Yours
 
+#if os(macOS)
+    import AppKit
+#endif
+
 @MainActor
 struct BodyTypographyTests {
     @Test(
@@ -105,4 +109,52 @@ struct BodyTypographyTests {
         #expect(CTFontCopyPostScriptName(body) as String == BundledSerifFont.regularName)
         #expect(CTFontGetSize(header) == CTFontGetSize(body))
     }
+    @Test(arguments: ["body", "heading:2", "quote"])
+    func defaultDisplayColorsDoNotPersistAndCustomColorsSurvive(role: String) throws {
+        let context = EnvironmentValues().fontResolutionContext
+        var text = AttributedString("默认正文 custom")
+        text[ParagraphStyleAttribute.self] = role
+        text.font = .body
+        if role == "quote" { text[QuoteAttribute.self] = true }
+        let native = NativeTextAttributes.native(text, context: context)
+        #expect(NativeTextAttributes.rich(native).foregroundColor == nil)
+        for color in [Color.red, Color.black, Color(red: 0.2, green: 0.2, blue: 0.2)] {
+            text.foregroundColor = color
+            let restored = NativeTextAttributes.rich(NativeTextAttributes.native(text, context: context))
+            let saved = try #require(restored.foregroundColor)
+            let actual = saved.resolve(in: EnvironmentValues())
+            let expected = color.resolve(in: EnvironmentValues())
+            #expect(abs(actual.red - expected.red) < 0.001)
+            #expect(abs(actual.green - expected.green) < 0.001)
+            #expect(abs(actual.blue - expected.blue) < 0.001)
+            #expect(abs(actual.opacity - expected.opacity) < 0.001)
+        }
+    }
+
+    #if os(macOS)
+        @Test func documentPaletteAdaptsToAppearanceAndContrast() throws {
+            for name in [NSAppearance.Name.aqua, .darkAqua] {
+                let appearance = try #require(NSAppearance(named: name))
+                appearance.performAsCurrentDrawingAppearance {
+                    guard let body = AppTheme.documentBody.usingColorSpace(.sRGB),
+                        let heading = AppTheme.documentHeading.usingColorSpace(.sRGB),
+                        let system = NSColor.textColor.usingColorSpace(.sRGB)
+                    else {
+                        Issue.record("Cannot resolve document colors in sRGB")
+                        return
+                    }
+                    let highContrast = AppTheme.resolvedDocumentColor(lightWhite: 0.2, appearance: appearance, increasedContrast: true)
+                    #expect(highContrast == .textColor)
+                    if name == .aqua {
+                        #expect(abs(body.redComponent - 0.2) < 0.001)
+                        #expect(abs(heading.redComponent - 36.0 / 255.0) < 0.001)
+                    } else {
+                        #expect(body == system)
+                        #expect(heading == system)
+                    }
+                }
+            }
+        }
+    #endif
+
 }

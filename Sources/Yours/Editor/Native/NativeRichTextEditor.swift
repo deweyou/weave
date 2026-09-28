@@ -609,9 +609,9 @@ struct NativeRichTextEditor {
             var attributes = textView.typingAttributes
             if attributes.removeValue(forKey: .yoursSyntaxColor) != nil {
                 #if os(macOS)
-                    attributes[.foregroundColor] = NSColor.textColor
+                    attributes[.foregroundColor] = AppTheme.documentBody
                 #else
-                    attributes[.foregroundColor] = UIColor.label
+                    attributes[.foregroundColor] = AppTheme.documentBody
                 #endif
             }
             let originalAttributes = attributes
@@ -677,9 +677,9 @@ struct NativeRichTextEditor {
                     attributes.removeValue(forKey: .yoursQuote)
                     if attributes.removeValue(forKey: .yoursQuoteColor) != nil {
                         #if os(macOS)
-                            attributes[.foregroundColor] = NSColor.textColor
+                            attributes[.foregroundColor] = AppTheme.documentBody
                         #else
-                            attributes[.foregroundColor] = UIColor.label
+                            attributes[.foregroundColor] = AppTheme.documentBody
                         #endif
                     }
                     var bodySample = AttributedString("\n")

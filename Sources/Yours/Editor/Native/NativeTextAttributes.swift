@@ -1653,9 +1653,9 @@ enum NativeTextAttributes {
         text.enumerateAttribute(.yoursQuoteColor, in: region) { value, range, _ in
             guard value != nil else { return }
             #if os(macOS)
-                text.addAttribute(.foregroundColor, value: NSColor.textColor, range: range)
+                text.addAttribute(.foregroundColor, value: AppTheme.documentBody, range: range)
             #else
-                text.addAttribute(.foregroundColor, value: UIColor.label, range: range)
+                text.addAttribute(.foregroundColor, value: AppTheme.documentBody, range: range)
             #endif
         }
         text.removeAttribute(.yoursQuoteColor, range: region)
@@ -1687,6 +1687,13 @@ enum NativeTextAttributes {
             paragraph.lineSpacing = DocumentTypography.bodyLineSpacing
             paragraph.paragraphSpacing = DocumentTypography.bodyParagraphSpacing
             let role = text.attribute(.yoursParagraphStyle, at: location, effectiveRange: nil) as? String ?? "body"
+            text.enumerateAttributes(in: range) { attributes, colorRange, _ in
+                guard attributes[.yoursSyntaxColor] == nil,
+                    let color = attributes[.foregroundColor] as? AppTheme.NativeColor,
+                    AppTheme.isDefaultDocumentColor(color)
+                else { return }
+                text.addAttribute(.foregroundColor, value: AppTheme.documentText(for: role), range: colorRange)
+            }
             let quoted =
                 text.attribute(.yoursQuote, at: location, effectiveRange: nil) as? Bool == true
                 || role == "quote" || content.hasPrefix("│ ")
@@ -1744,10 +1751,10 @@ enum NativeTextAttributes {
                 if !structured { paragraph.paragraphSpacing = DocumentTypography.quoteSpacing }
                 text.enumerateAttribute(.foregroundColor, in: range) { value, colorRange, _ in
                     #if os(macOS)
-                        guard value == nil || value as? NSColor == NSColor.textColor else { return }
+                        guard value == nil || (value as? NSColor).map(AppTheme.isDefaultDocumentColor) == true else { return }
                         text.addAttributes([.foregroundColor: NSColor.secondaryLabelColor, .yoursQuoteColor: true], range: colorRange)
                     #else
-                        guard value == nil || value as? UIColor == UIColor.label else { return }
+                        guard value == nil || (value as? UIColor).map(AppTheme.isDefaultDocumentColor) == true else { return }
                         text.addAttributes([.foregroundColor: UIColor.secondaryLabel, .yoursQuoteColor: true], range: colorRange)
                     #endif
                 }
@@ -1816,7 +1823,7 @@ enum NativeTextAttributes {
                     attributes[.foregroundColor] = NSColor.secondaryLabelColor
                     attributes[.yoursQuoteColor] = true
                 } else {
-                    attributes[.foregroundColor] = run.foregroundColor.map(NSColor.init) ?? NSColor.textColor
+                    attributes[.foregroundColor] = run.foregroundColor.map(NSColor.init) ?? AppTheme.documentText(for: role)
                 }
                 if let color = run.backgroundColor { attributes[.backgroundColor] = NSColor(color) }
             #else
@@ -1824,7 +1831,7 @@ enum NativeTextAttributes {
                     attributes[.foregroundColor] = UIColor.secondaryLabel
                     attributes[.yoursQuoteColor] = true
                 } else {
-                    attributes[.foregroundColor] = run.foregroundColor.map(UIColor.init) ?? UIColor.label
+                    attributes[.foregroundColor] = run.foregroundColor.map(UIColor.init) ?? AppTheme.documentText(for: role)
                 }
                 if let color = run.backgroundColor { attributes[.backgroundColor] = UIColor(color) }
             #endif
@@ -1941,14 +1948,14 @@ enum NativeTextAttributes {
             if let style = attributes[.underlineStyle] as? Int, style != 0 { result[range].underlineStyle = .single }
             if let style = attributes[.strikethroughStyle] as? Int, style != 0 { result[range].strikethroughStyle = .single }
             #if os(macOS)
-                if let color = attributes[.foregroundColor] as? NSColor, color != .textColor, color != .clear,
+                if let color = attributes[.foregroundColor] as? NSColor, !AppTheme.isDefaultDocumentColor(color), color != .clear,
                     attributes[.yoursSyntaxColor] == nil, attributes[.yoursQuoteColor] == nil
                 {
                     result[range].foregroundColor = Color(nsColor: color)
                 }
                 if let color = attributes[.backgroundColor] as? NSColor { result[range].backgroundColor = Color(nsColor: color) }
             #else
-                if let color = attributes[.foregroundColor] as? UIColor, color != .label, color != .clear,
+                if let color = attributes[.foregroundColor] as? UIColor, !AppTheme.isDefaultDocumentColor(color), color != .clear,
                     attributes[.yoursSyntaxColor] == nil, attributes[.yoursQuoteColor] == nil
                 {
                     result[range].foregroundColor = Color(uiColor: color)

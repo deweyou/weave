@@ -120,3 +120,5 @@ MacWorkspaceNavigation 以页面和可选文档 UUID 为访问位置，通过 se
 非代码系统字族及系统中文 UI 回退字族在 `NativeTextAttributes.displayFont` 中投影到思源宋体，保留原字号倍率；等宽与显式自定义字族跳过 family 替换。中文 UI 回退字族通过公开 Core Text API 按简体、繁体、香港语言解析；不将公开的自定义 PingFang 字族一并替换。旧中文斜体可能只保存独立强调标志，显示时同时读取该标志与原字体 traits。`setFont` 将投影前 CTFont 保存在临时原生属性 `yoursStoredFont`，`rich` / `storedFont` 恢复原字体、字重与斜体；该属性不属于 `NoteAttributeScope`。输入属性、快捷格式、删除恢复及撤销快照必须同时维护显示字体与原字体，避免把已显示的宋体写回笔记。章节标题根据段落角色显示 SemiBold，显式加粗强调仍显示 Bold，原存储字重保持；斜体通过显示矩阵呈现，各字重使用同版本真实字体；表头在投影前选择字重。旧笔记无需迁移，卡片摘要与操作界面不受此映射影响。
 
 _Last updated: 2026-09-28 — 记录正文显示字体的可逆桥接与资源边界。_
+
+`AppTheme.documentBody` / `documentHeading` 为按外观与对比度解析的原生动态颜色，供 SwiftUI 标题、表格和原生正文共用。`NativeTextAttributes.rich` 排除这些默认显示色，段落角色切换重新选择默认色；显式自定义颜色不参与主题投影。

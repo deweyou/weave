@@ -102,6 +102,7 @@ struct NoteEditorView: View {
                 ), axis: .vertical
             )
             .font(TitleTypography.document)
+            .foregroundStyle(Color(AppTheme.documentHeading))
             .lineSpacing(DocumentTypography.titleLineSpacing)
             .lineLimit(1...4)
             .textFieldStyle(.plain)
