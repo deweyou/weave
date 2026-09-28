@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Yours — wave and water drop</title>
+  <desc>Editable master artwork. Keep the wave and droplet as independent paths. The platform supplies the background and icon mask.</desc>
+  <g id="yours-mark" fill="#171717" transform="translate(512 539) scale(1.15) translate(-512 -555)">
+    <path id="wave" d="M 240,297 C 313,272 354,287 419,306 C 482,326 524,329 591,310 C 655,291 704,276 780,296 C 792,299 795,308 785,319 L 526,621 Q 512,637 498,621 L 239,319 C 229,308 228,302 240,297 Z"/>
+    <path id="droplet" d="M 505,662 Q 512,650 519,662 C 536,689 572,727 572,764 C 572,800 547,825 512,825 C 477,825 452,800 452,764 C 452,727 488,689 505,662 Z"/>
+  </g>
+</svg>

@@ -18,6 +18,8 @@
 
 ## 自动检查
 
+App 图标修改：运行 `python3 scripts/generate_app_icons.py` 与 `--check`，确认主 SVG 与 `.icon` 图层同步；预览 `.build/app-icons/preview.html` 中浅深色、Clear / Tinted 和缩小图。随后构建 Mac / iOS target，检查产物 Info.plist 的 `AppIcon` 引用、Mac 的 `AppIcon.icns`、iPhone/iPad 的图标记录与 Assets.car 内各外观的图标栈。当前矢量版已通过两平台构建及资源检查，原生导出图已查看。Mac 已启动使用独立 bundle identifier 和沙箱的本地图标预览，在“关于 Yours”中确认新图标实际加载且三角形与水滴可辨；原有工作区实例保留。Dock 截图读取超时，Dock / 主屏幕、不同壁纸、真机和系统着色设置尚待实测。
+
 | 影响范围 | 命令 / 检查 | 能证明什么 |
 | --- | --- | --- |
 | Swift 格式 / 静态风格 | `swift format lint --recursive --strict --configuration .swift-format Sources Tests UITests Package.swift` | Swift 源码符合仓库格式与基础静态规则 |

@@ -9,6 +9,7 @@
 | 本期做什么、未来做什么 | [产品](product.md)、[本期规格](specs/first-release.md) | 用户本次范围 |
 | 代码在哪里、数据如何保存 | [架构](architecture.md) | `Sources/Yours` |
 | Mac 底板与双栏卡片、跨设备布局、正文样式和原生交互怎么设计 | [设计](../DESIGN.md) | 当前 App、[原生设计规则](../.agents/rules/apple-native-design.md) |
+| App 品牌图标定稿、SVG 编辑与素材生成 | [图标设计](../DESIGN.md#app-品牌图标已确认设计) | [制作说明](../design/AppIcon/README.md)、[主 SVG](../design/AppIcon/yours-mark.svg) |
 | Apple 原生 UI 规则、同心圆角、iOS / iPadOS / 折叠形态与视觉走查 | [设计规则](../.agents/rules/apple-native-design.md) | [设计基线](../DESIGN.md)、[验证](verification.md) |
 | 按钮、链接和可点击区域的 pointer 规则 | [光标设计约定](../DESIGN.md#可点击区域的光标全局约定) | [指针验收](verification.md#可点击区域的指针验收) |
 | 如何验证编辑器改动 | [验证](verification.md) | 受影响测试和目标平台 |

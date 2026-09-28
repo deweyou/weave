@@ -59,6 +59,19 @@ Apple 已提供 iPhone Duo 的官方设计与布局指导，平台规则和来�
 
 ## 图标系统
 
+### App 品牌图标（已确认设计）
+
+用户于 2026-09-28 确认采用[定稿参考图](docs/design/app-icon-approved-reference.png)左侧「01 / WATER」版本；右侧积沙图仅为同图对照，不属于定稿。
+
+- 主体为实心倒三角，顶边是一道平缓波浪，边角柔和；下方沿中轴保留一颗独立水滴。沿用参考图左侧放大后的水滴及整体比例，不再替换为积沙、完整沙漏或字母轮廓。
+- 主体与水滴共同居中置于 Apple App 图标圆角底板中，保留充足留白。浅色采用中性白底、黑色图形，不使用奶黄或暖米色。
+- 用户对比实际 Dock 后确认提高图形占比：以原定稿图形组为基础等比放大 15%，围绕 `(512, 555)` 缩放并上移 16 / 1024 画布高度，底板不变；不单独改变水滴和三角形的比例。
+- 浅色、深色和玻璃适配保持同一图形。Default / Dark 使用清晰的实色前景，Mono 使用白色前景及轻量高光、阴影和透明度；透明和着色外观由系统生成，不把壁纸或玻璃截图烘焙进图形。
+- [主 SVG](design/AppIcon/yours-mark.svg) 保留 `wave`、`droplet` 两条独立路径；[Icon Composer 工程](design/AppIcon/AppIcon.icon) 已接入 Xcode 的 Mac / iPhone / iPad target。修改和重新导出见[图标制作说明](design/AppIcon/README.md)。完整 `yours` 字标未单独定稿。
+- 已检查 Apple 工具导出的浅深色及透明图像，并通过 Mac / iOS Simulator 构建与图标资源检查。Dock / 主屏幕实测、不同壁纸、小尺寸真机可读性仍待验证；概念对照图本身不作为 App 图片资源。
+
+### 界面功能图标
+
 界面图标默认使用 [SF Symbols](https://developer.apple.com/design/human-interface-guidelines/sf-symbols)，由 SwiftUI 的 `Image(systemName:)` 或对应原生 API 加载。优先选择语义准确的系统 symbol，并使用系统提供的字重、尺寸、变体和渲染模式适配所在控件；不把 symbol 导出为普通图片后重新描边，也不为同一组操作混用不同图标库。
 
 只有在 SF Symbols 缺少稳定、准确的产品语义，或某个 Yours 专属图标确实需要跨平台共享时，才使用项目自有矢量资源。自有图标保留单一 SVG 源文件和语义命名，通过受控的资源边界生成或接入各平台；默认作为 template image 使用语义颜色。不能为了一个常规图标引入整套第三方依赖，第三方图标库也不能直接扩散到业务视图。
