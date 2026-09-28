@@ -1,6 +1,6 @@
-# Markdown 全集 · Weave 效果手册
+# Markdown 全集 · Yours 效果手册
 
-这是一份可以直接导入 Weave 的长期展示样本。你可以在正文中修改表格、勾选任务、编辑代码，再导出 Markdown 对照原文。
+这是一份可以直接导入 Yours 的长期展示样本。你可以在正文中修改表格、勾选任务、编辑代码，再导出 Markdown 对照原文。
 
 这里的“全集”覆盖常用 Markdown、GitHub 风格写法和常见扩展，不代表所有方言都已实现。前半部分展示当前能力，后半部分保留兼容性对照；功能状态以当前源码和实际操作为准。
 
@@ -15,7 +15,7 @@
 
 ```swift
 struct Note {
-    let title = "你好，Weave 👋"
+    let title = "你好，Yours 👋"
     var isPinned = false
 }
 ```
@@ -56,7 +56,7 @@ struct Note {
 
 ## 02 · 段落、中英文与 Unicode
 
-这是普通中文段落。Weave 使用系统字体，正文保持稳定的阅读宽度。中文标点应自然呈现：逗号、顿号，句号。括号（补充说明）、引号“这是一段引用”和破折号——都不需要额外的 Markdown 标记。
+这是普通中文段落。Yours 使用系统字体，正文保持稳定的阅读宽度。中文标点应自然呈现：逗号、顿号，句号。括号（补充说明）、引号“这是一段引用”和破折号——都不需要额外的 Markdown 标记。
 
 This is an English paragraph. Mix 中文、English、1234567890 and punctuation in the same sentence. Observe the baseline, wrapping, selection, and caret position.
 
@@ -216,7 +216,7 @@ struct Draft {
     var wordCount = 128
 
     func summary() -> String {
-        return "Hello, Weave"
+        return "Hello, Yours"
     }
 }
 ```
@@ -392,13 +392,13 @@ ___
 
 ## 12 · 兼容性对照：尚未提供专用渲染的扩展
 
-这些样例故意保留在全集中，方便将来补齐能力时复查。在当前 Weave 中，可能显示为普通文字或普通代码块；其他 Markdown 阅读器的显示不代表 Weave 已支持。
+这些样例故意保留在全集中，方便将来补齐能力时复查。在当前 Yours 中，可能显示为普通文字或普通代码块；其他 Markdown 阅读器的显示不代表 Yours 已支持。
 
 ### 图片
 
 当前不显示或编辑图片，下面的图片语法用于观察原文是否保留，不需要下载远程资源。
 
-![Weave 文档示意图](markdown-sample.svg)
+![Yours 文档示意图](markdown-sample.svg)
 
 ### HTML
 
@@ -465,8 +465,8 @@ H~2~O 与 x^2^
 
 ## 14 · 维护约定
 
-本文件是展示样本的源文件。Weave 中导入的记录是独立副本；在 App 内修改不会自动写回本文件。需要保留修改时先导出，再对比更新仓库文件。
+本文件是展示样本的源文件。Yours 中导入的记录是独立副本；在 App 内修改不会自动写回本文件。需要保留修改时先导出，再对比更新仓库文件。
 
-新增语法时同时补一段正常样例、一段容易出错的边界样例，并核对本期规格中的支持状态。不要为了让展示页看起来完整，把其他 Markdown 阅读器能显示的功能写成 Weave 已实现。
+新增语法时同时补一段正常样例、一段容易出错的边界样例，并核对本期规格中的支持状态。不要为了让展示页看起来完整，把其他 Markdown 阅读器能显示的功能写成 Yours 已实现。
 
 本文件的复选框是手动检查清单，未勾选不表示失败；勾选也不能替代测试和实际操作证据。

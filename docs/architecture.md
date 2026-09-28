@@ -2,35 +2,35 @@
 
 ## 工程与输入
 
-现状：SwiftUI 组织界面，macOS / iOS 26 为基线；Swift Package 使用 Swift 6.2。共享 App target 位于 `Weave.xcodeproj`，Package 用于带覆盖率的单测；`UITests/WeaveUITests.swift` 通过 Xcode UI test target 在 Mac 和 iPhone 模拟器运行。
+现状：SwiftUI 组织界面，macOS / iOS 26 为基线；Swift Package 使用 Swift 6.2。共享 App target 位于 `Yours.xcodeproj`，Package 用于带覆盖率的单测；`UITests/YoursUITests.swift` 通过 Xcode UI test target 在 Mac 和 iPhone 模拟器运行。
 
 | 文件 | 职责 |
 | --- | --- |
-| `Sources/Weave/App/ToastPresenter.swift` | 页面级短暂反馈消息、替换与关闭状态 |
-| `Sources/Weave/App/Toast.swift` | Liquid Glass 反馈浮层；生命周期由 SwiftUI task 管理 |
-| `Sources/Weave/App/AppTheme.swift` | SwiftUI 与原生绘制共用的主题色，默认系统蓝；不属于文档持久化属性 |
-| `Sources/Weave/App/WeaveApp.swift` | 生命周期、存储实例、Mac 新建命令 |
-| `Sources/Weave/App/NativeRecordGallery.swift` | NSCollectionView / UICollectionView 复用、SwiftUI 卡片宿主与滚动恢复 |
-| `Sources/Weave/App/RecordGalleryLayout.swift` | 摘要高度缓存、最短列几何与可见区域索引 |
-| `Sources/Weave/App/WorkspaceView.swift` | 平台入口、记录卡片、记录编辑器及格式菜单 |
-| `Sources/Weave/App/MobileWorkspaceView.swift` | iOS/iPadOS 自适应双栏、分类选择、卡片与编辑导航栈、长按整理与移动分类 sheet |
-| `Sources/Weave/App/MacWorkspaceView.swift` | Mac 底板功能栏、圆角卡片内的 Inbox 入口/内容原生分栏、编辑与窗口级新建命令上下文 |
-| `Sources/Weave/Editor/Native/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、选区、输入事件和平台交互 |
-| `Sources/Weave/Editor/Features/EditorFeatureRegistry.swift` | 不可变输入上下文、feature 协议、语义命令与优先级 registry |
-| `Sources/Weave/Editor/Features/StandardEditorFeatures.swift` | quote、task/list、code block、inline 和 Markdown shortcut 等内置输入 feature |
-| `Sources/Weave/Editor/Native/NativeTextAttributes.swift` | TextKit 绘制、字体映射、原生属性与持久化属性转换 |
-| `Sources/Weave/Editor/ParagraphEditing.swift` | `DocumentTypography` 排版配置、独立行内强调、整段格式操作、旧语义字体迁移、待办标记切换 |
-| `Sources/Weave/Editor/MarkdownShortcut.swift` | 单次输入触发的局部转换规则，UTF-16 范围 |
-| `Sources/Weave/Markdown/MarkdownFormatting.swift` | 常用 Markdown 导入与语义导出，非全部富文本的无损编解码器 |
-| `Sources/Weave/Markdown/MarkdownFile.swift` | Markdown 文件类型与 SwiftUI 文档读写适配 |
-| `Sources/Weave/Model/Note.swift` | 记录值模型、纯文本投影和兼容解码 |
-| `Sources/Weave/Model/TableData.swift` | 表格 Codable 模型、行列操作、Markdown 表格交换与纯文本投影 |
-| `Sources/Weave/Editor/Native/NativeTableView.swift` | 表格附件尺寸、原位单元格控件与行列菜单 |
-| `Sources/Weave/Editor/Native/NativeTableOverlay.swift` | 表格控件与代码块工具栏随原生文本布局定位、复用与移除 |
-| `Sources/Weave/Editor/RichTextClipboard.swift` | 结构化选区剪贴板编解码与粘贴时的块标识去重 |
-| `Sources/Weave/Editor/CodeBlockEditing.swift` | 代码语言、别名、块范围、缩进和基础词法高亮规则 |
-| `Sources/Weave/Editor/CodeFormatting.swift` | 独立 actor 中的离线 Prettier / JavaScriptCore 格式化；资源随 App 打包 |
-| `Sources/Weave/Persistence/NoteStore.swift` | 身份、标题、搜索投影、JSON 读写和失败恢复 |
+| `Sources/Yours/App/ToastPresenter.swift` | 页面级短暂反馈消息、替换与关闭状态 |
+| `Sources/Yours/App/Toast.swift` | Liquid Glass 反馈浮层；生命周期由 SwiftUI task 管理 |
+| `Sources/Yours/App/AppTheme.swift` | SwiftUI 与原生绘制共用的主题色，默认系统蓝；不属于文档持久化属性 |
+| `Sources/Yours/App/YoursApp.swift` | 生命周期、存储实例、Mac 新建命令 |
+| `Sources/Yours/App/NativeRecordGallery.swift` | NSCollectionView / UICollectionView 复用、SwiftUI 卡片宿主与滚动恢复 |
+| `Sources/Yours/App/RecordGalleryLayout.swift` | 摘要高度缓存、最短列几何与可见区域索引 |
+| `Sources/Yours/App/WorkspaceView.swift` | 平台入口、记录卡片、记录编辑器及格式菜单 |
+| `Sources/Yours/App/MobileWorkspaceView.swift` | iOS/iPadOS 自适应双栏、分类选择、卡片与编辑导航栈、长按整理与移动分类 sheet |
+| `Sources/Yours/App/MacWorkspaceView.swift` | Mac 底板功能栏、圆角卡片内的 Inbox 入口/内容原生分栏、编辑与窗口级新建命令上下文 |
+| `Sources/Yours/Editor/Native/NativeRichTextEditor.swift` | NSTextView / UITextView 桥接、选区、输入事件和平台交互 |
+| `Sources/Yours/Editor/Features/EditorFeatureRegistry.swift` | 不可变输入上下文、feature 协议、语义命令与优先级 registry |
+| `Sources/Yours/Editor/Features/StandardEditorFeatures.swift` | quote、task/list、code block、inline 和 Markdown shortcut 等内置输入 feature |
+| `Sources/Yours/Editor/Native/NativeTextAttributes.swift` | TextKit 绘制、字体映射、原生属性与持久化属性转换 |
+| `Sources/Yours/Editor/ParagraphEditing.swift` | `DocumentTypography` 排版配置、独立行内强调、整段格式操作、旧语义字体迁移、待办标记切换 |
+| `Sources/Yours/Editor/MarkdownShortcut.swift` | 单次输入触发的局部转换规则，UTF-16 范围 |
+| `Sources/Yours/Markdown/MarkdownFormatting.swift` | 常用 Markdown 导入与语义导出，非全部富文本的无损编解码器 |
+| `Sources/Yours/Markdown/MarkdownFile.swift` | Markdown 文件类型与 SwiftUI 文档读写适配 |
+| `Sources/Yours/Model/Note.swift` | 记录值模型、纯文本投影和兼容解码 |
+| `Sources/Yours/Model/TableData.swift` | 表格 Codable 模型、行列操作、Markdown 表格交换与纯文本投影 |
+| `Sources/Yours/Editor/Native/NativeTableView.swift` | 表格附件尺寸、原位单元格控件与行列菜单 |
+| `Sources/Yours/Editor/Native/NativeTableOverlay.swift` | 表格控件与代码块工具栏随原生文本布局定位、复用与移除 |
+| `Sources/Yours/Editor/RichTextClipboard.swift` | 结构化选区剪贴板编解码与粘贴时的块标识去重 |
+| `Sources/Yours/Editor/CodeBlockEditing.swift` | 代码语言、别名、块范围、缩进和基础词法高亮规则 |
+| `Sources/Yours/Editor/CodeFormatting.swift` | 独立 actor 中的离线 Prettier / JavaScriptCore 格式化；资源随 App 打包 |
+| `Sources/Yours/Persistence/NoteStore.swift` | 身份、标题、搜索投影、JSON 读写和失败恢复 |
 
 当前自定义 `CodeLayoutManager: NSLayoutManager` 绘制行内代码、代码块背景和引用竖线，走 TextKit 1 布局路径；不能称作 TextKit 2 编辑器。macOS 以滚动容器内边距限制正文宽度，滚动条留在编辑区右边。
 
@@ -47,6 +47,8 @@
 
 ## 数据与恢复
 
+当前应用标识为 `app.yours.editor`，存储目录为 `Yours`，应用偏好、富文本与剪贴板自定义标识统一使用 `yours`。产品未发布，本次更名不迁移开发期 Weave 沙箱、存储目录、偏好或富文本属性键；旧文件保留，Yours 使用独立存储。
+
 `Note.richText` 是主数据，`text` 为正文搜索和摘要使用的纯文本投影，`Note.title` 是独立持久化的纯文本字段，搜索同时匹配标题和正文。缺少标题分离标记的旧记录将首个非空行迁移为标题，并从正文中移除该行；其余富文本属性保持不变。迁移后的记录保存分离标记，后续不再根据正文猜测；显式空标题保持为空。`NoteAttributeScope` 保存 SwiftUI 属性、`CodeStyleAttribute`、`CodeLanguageAttribute`、`ParagraphStyleAttribute`、`QuoteAttribute`、`TaskStateAttribute`、`InlineEmphasisAttribute`、`ListMarkerAttribute` 与 `TableAttribute`。代码属性区分 inline 与带 ID 的 block；段落属性保存标题、列表、任务和代码等内部角色，引用通过独立布尔属性叠加，因此可以包住这些段落类型。引用竖线和默认次要文字色只在原生显示层生成，不写入 Markdown 内容或用户颜色；旧引用的 `│ ` 前缀与旧 quote 段落角色在读取时迁移。任务完成状态独立保存且正文不包含 checkbox 占位字符，旧任务的 `☐ / ☑` 前缀在读取时迁移为该属性。行内强调以独立标志保存加粗和斜体，经过原生桥接、存储和结构化剪贴板保留，避免与标题自身的字重混淆。无序圆点和有序编号由 `ListMarkerAttribute` 保存，原生布局在正文左侧绘制，正文与选区不包含标记字符；缩进仍使用 Tab，不是完整结构化列表树。显示标记按三层循环；嵌套有序列表根据父项边界重新计数，主级保留指定起始值，Markdown 仍使用数字编号。旧记录仅对明确的列表角色迁移旧文本标记，先校验旧纯文本投影再迁移，重复读取不再剥离正文开头的数字。
 
 读取旧记录时，仅将明确保存为旧 `.title` / `.title2` / `.title3` 的语义字体迁移为对应标题角色，并补齐旧标题的行内强调。无法确认语义的显式字号保留原样；显示布局不再通过字号阈值猜标题。新标题按角色和独立强调投影到当前排版配置。
@@ -57,7 +59,7 @@
 
 正文选区同时写入应用自有 Codable 格式、系统 RTF 和纯文本；同一应用内粘贴优先恢复引用、Todo、标题和行内强调等完整语义，跨应用则使用标准 RTF 或纯文本。表格的纯文本回退为 Markdown，粘贴时重建表格和代码块 ID，避免两个副本共用输入视图；代码的纯文本回退保留原文字面量。外部纯文本粘贴在解析后存在已支持 Markdown 语义时复用同一插入、撤销和发布路径；普通文本及外部 RTF/HTML 回退原生粘贴，代码上下文不解析 Markdown。单元格内部编辑继续使用平台剪贴板。
 
-稳定 UUID 在创建时生成；存储数组保持创建顺序，Mac 与移动端浏览视图均按最后编辑时间排序。分类操作不修改编辑时间。各窗口独立持有导航状态，Mac 新建命令作用于当前窗口且不指定分类，移动端沿用当前分类。Mac 启动进入首页空态，文档入口进入 Inbox 全部文档总览；Inbox 仅为导航入口，不改持久化分类；紧凑移动端从分类导航开始。移动端以一个 NavigationSplitView 和 detail NavigationStack 适配窗口尺寸，UUID 路径驱动编辑页，不在横竖屏切换时创建另一套编辑器。存储由应用实例持有，Observation 驱动 UI。修改先立即进入主线程内存状态，再由串行 actor 合并旧快照并在主线程外编码、原子写入 Application Support 下 `Weave/notes.json`；场景离开 active 时等待当前快照写完。实际目录受沙箱和启动方式影响。
+稳定 UUID 在创建时生成；存储数组保持创建顺序，Mac 与移动端浏览视图均按最后编辑时间排序。分类操作不修改编辑时间。各窗口独立持有导航状态，Mac 新建命令作用于当前窗口且不指定分类，移动端沿用当前分类。Mac 启动进入首页空态，文档入口进入 Inbox 全部文档总览；Inbox 仅为导航入口，不改持久化分类；紧凑移动端从分类导航开始。移动端以一个 NavigationSplitView 和 detail NavigationStack 适配窗口尺寸，UUID 路径驱动编辑页，不在横竖屏切换时创建另一套编辑器。存储由应用实例持有，Observation 驱动 UI。修改先立即进入主线程内存状态，再由串行 actor 合并旧快照并在主线程外编码、原子写入 Application Support 下 `Yours/notes.json`；场景离开 active 时等待当前快照写完。实际目录受沙箱和启动方式影响。
 
 记录的 `folderID` 是记录级字段，不属于 `NoteAttributeScope`；旧记录缺字段时默认未分类。`NoteFolder` 独立保存空分类。`notes.json` 当前以 `version: 1 / folders / notes` 单个原子快照存储；读取兼容旧记录数组，首次实际修改才写新版。未知版本、缺字段、重复身份、空分类名和悬空分类引用均禁止覆盖原文件。旧版本 App 不支持新版容器，不应交替写同一目录。
 
@@ -104,7 +106,7 @@ Mac 精简工作区不再持有分类、搜索与导入状态；左栏直接绑�
 
 ## 应用偏好与本地化
 
-`AppPreferences` 由 App 持有并注入窗口，使用 UserDefaults 持久化外观与语言，不进入 notes.json。Debug 的有效 `WEAVE_UI_TEST_SESSION` 使用独立偏好 suite，与正式偏好及其他测试会话隔离。
+`AppPreferences` 由 App 持有并注入窗口，使用 UserDefaults 持久化外观与语言，不进入 notes.json。Debug 的有效 `YOURS_UI_TEST_SESSION` 使用独立偏好 suite，与正式偏好及其他测试会话隔离。
 
 `preferredColorScheme` 在窗口内容根部应用主题，跟随系统时传 nil。活动语言在进程生命周期内固定，语言选择只修改下次启动偏好，避免为了切换语言重建编辑器；正式应用同时写入应用域的 `AppleLanguages`，供系统菜单在重启时采用。隔离测试 suite 不更改正式应用域的系统菜单语言。
 

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 # UI declarations are covered by XCUITest separately; never hide them in totals.
-UI_FILES = {"WeaveApp.swift", "AppSettingsView.swift", "WorkspaceView.swift", "MacWorkspaceView.swift", "MobileWorkspaceView.swift", "NativeTableView.swift", "Toast.swift"}
+UI_FILES = {"YoursApp.swift", "AppSettingsView.swift", "WorkspaceView.swift", "MacWorkspaceView.swift", "MobileWorkspaceView.swift", "NativeTableView.swift", "Toast.swift"}
 BRIDGE_FILES = {"NativeRichTextEditor.swift", "NativeTextAttributes.swift", "NativeTableOverlay.swift", "NativeRecordGallery.swift"}
 THRESHOLDS = {"all": 35.0, "core": 90.0, "bridge": 55.0}
 PLATFORM_ONLY = {"App/MobileWorkspaceView.swift": "ios", "App/MacWorkspaceView.swift": "macos"}
@@ -57,7 +57,7 @@ def evaluate(report, source_root, platform="macos"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("report", type=Path)
-    parser.add_argument("--sources", type=Path, default=Path("Sources/Weave"))
+    parser.add_argument("--sources", type=Path, default=Path("Sources/Yours"))
     parser.add_argument("--platform", choices=["macos", "ios"], default="macos")
     parser.add_argument("--output", type=Path, default=Path(".build/coverage-summary.md"))
     args = parser.parse_args()

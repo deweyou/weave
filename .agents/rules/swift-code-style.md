@@ -1,4 +1,4 @@
-# Weave Swift 代码规范
+# Yours Swift 代码规范
 
 本规则适用于仓库内的 Swift、SwiftUI、AppKit 和 UIKit 代码。以
 [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/)
@@ -38,8 +38,8 @@
 ## 组织与改动
 
 - 一个类型或函数只承担一个清晰职责。复杂视图按真实的状态与刷新边界拆分，不机械执行“一类型一文件”。
-- `Sources/Weave` 按稳定领域边界组织：`App` 放生命周期和工作区界面，`Editor` 放编辑语义与原生桥接，
-  `Markdown` 放交换格式，`Model` 放共享值类型，`Persistence` 放存储边界。`Tests/WeaveTests` 镜像对应领域；
+- `Sources/Yours` 按稳定领域边界组织：`App` 放生命周期和工作区界面，`Editor` 放编辑语义与原生桥接，
+  `Markdown` 放交换格式，`Model` 放共享值类型，`Persistence` 放存储边界。`Tests/YoursTests` 镜像对应领域；
   跨领域 UI 流程保留在 `UITests`。
 - 编辑 feature 读取不可变输入上下文并返回语义命令，不直接持有或修改 `NSTextView`、`UITextView` 或 `NSTextStorage`；
   原生 coordinator 统一负责选区、输入属性、撤销和发布。新增 feature 时显式处理规则优先级与组合冲突。

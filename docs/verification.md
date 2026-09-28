@@ -22,14 +22,14 @@
 | --- | --- | --- |
 | Swift 格式 / 静态风格 | `swift format lint --recursive --strict --configuration .swift-format Sources Tests UITests Package.swift` | Swift 源码符合仓库格式与基础静态规则 |
 | Swift 行为 / 数据修改 | `swift test` | 现有测试覆盖的规则、存储与桥接行为 |
-| Mac 代码与共享代码 | `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build` | Mac target 编译 |
-| iOS 代码与共享代码 | `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build` | iOS Simulator target 编译 |
+| Mac 代码与共享代码 | `xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build` | Mac target 编译 |
+| iOS 代码与共享代码 | `xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build` | iOS Simulator target 编译 |
 | 文档 / 配置 | 本地链接、入口、源码一致性；Harness `config_inspect` | 文档和配置有效，不证明 App 行为 |
 | 交付差异 | `git diff --check`；暂存后 `git diff --cached --check` | 空白与差异检查，未跟踪文件需另查 |
 
 首次使用需 Xcode / Swift 6.2 兼容工具链。沙箱中的宏插件或编译缓存权限失败属于环境问题；明确报告并走宿主授权，不把关闭沙箱作为仓库默认命令。日志和构建产物放 `.build/` 或任务临时目录，Run 中按需记录 Evidence。
 
-Mac 实际预览使用 `xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build` 做本地 ad-hoc 签名，保留工程的 App Sandbox 配置。`CODE_SIGNING_ALLOWED=NO` 只用于编译验证；直接运行无签名产物可能改用非容器 Application Support，不能据此判定原笔记丢失。重启按 AGENTS 的单实例规则操作，先核对会话、保存状态与实际数据目录。
+Mac 实际预览使用 `xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build` 做本地 ad-hoc 签名，保留工程的 App Sandbox 配置。`CODE_SIGNING_ALLOWED=NO` 只用于编译验证；直接运行无签名产物可能改用非容器 Application Support，不能据此判定原笔记丢失。重启按 AGENTS 的单实例规则操作，先核对会话、保存状态与实际数据目录。
 
 ## 手动操作矩阵
 
@@ -70,7 +70,7 @@ Mac 文字布局调整需检查中文、英文、空段、标题、跨行选择�
 `.github/workflows/ci.yml` 在每次 PR、main 推送及手动触发时运行，采用 GitHub `macos-26` 镜像和 Xcode 26.2。工具链变更需重新核对覆盖率和 UI 基线；镜像清单见 [GitHub runner-images](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)。
 
 - `Unit tests and coverage`：运行 Swift 测试与 Python 覆盖率门禁自身测试，保留日志、LLVM JSON 和 Markdown 汇总。
-- `UI tests (macOS)` / `UI tests (iOS)`：运行 `WeaveUITests`，保存 `.xcresult`（包含截图）和日志。iOS 自动选择可用的 iOS 26 及以上 iPhone 模拟器，不绑死设备 UUID。
+- `UI tests (macOS)` / `UI tests (iOS)`：运行 `YoursUITests`，保存 `.xcresult`（包含截图）和日志。iOS 自动选择可用的 iOS 26 及以上 iPhone 模拟器，不绑死设备 UUID。
 - `CI required`：汇总检查；上游失败、取消或跳过都不能通过。仓库分支保护需要将此检查设为必需；仅添加 YAML 不会自动修改 GitHub 分支保护。
 
 本地单测和门禁：
@@ -91,13 +91,13 @@ Package 单测运行在 Mac，覆盖率脚本默认 `--platform macos`：明确�
 本地 UI 测试：
 
 ```sh
-xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/ui-macos -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
-xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-ios -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'platform=macOS' -derivedDataPath .build/ui-macos -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+xcodebuild -project Yours.xcodeproj -scheme Yours -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-ios -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
 ```
 
 添加 `-resultBundlePath` 可保存到尚不存在的 `.xcresult` 路径。Mac UI 测试需要可用桌面与测试自动化权限，会操作测试 App。CI 使用临时宿主；本地不在操作其他 App 时混跑 UI 测试。
 
-每个 UI 测试通过 Debug 专用 `WEAVE_UI_TEST_SESSION` UUID 使用独立的 Application Support/WeaveUITests 子目录；重启同一测试继续读取相同数据，不使用或清理真实 Weave/notes.json。Release 不读取该变量。测试以稳定 accessibilityIdentifier 查找控件；Mac 新建通过窗口顶部「+」完成，测试先进入文档页；默认 UI 测试固定以中文启动，英文设置页另有独立用例。截图和文本断言只证明所覆盖场景；真实中文候选、富文本视觉和触控仍按上面的矩阵验证。
+每个 UI 测试通过 Debug 专用 `YOURS_UI_TEST_SESSION` UUID 使用独立的 Application Support/YoursUITests 子目录；重启同一测试继续读取相同数据，不使用或清理真实 Yours/notes.json。Release 不读取该变量。测试以稳定 accessibilityIdentifier 查找控件；Mac 新建通过窗口顶部「+」完成，测试先进入文档页；默认 UI 测试固定以中文启动，英文设置页另有独立用例。截图和文本断言只证明所覆盖场景；真实中文候选、富文本视觉和触控仍按上面的矩阵验证。
 
 ## Mac 工作区布局回归
 
@@ -222,11 +222,11 @@ Toast 光标回归：`PointerRegionTests` 在同窗口叠放正文与按钮区�
 
 - `swift test --filter 'RecordGalleryPerformanceTests|RecordMasonryLayoutTests'`：验证最短列、窄宽布局、按列索引与全量矩形交集的一致性；1,000 / 10,000 条记录连续查询 1,000 个视口，断言滚动不重复测量、可见卡片数量有界。输出首次布局与视口查询耗时；耗时用于同机同配置比较，不设置易受 CI 负载影响的固定毫秒门槛。
 - 原生 Mac 集成用例创建真实 CollectionView，滚动 1,000 条记录，断言创建宿主数量小于 100、可见数量小于 60；检查滚动偏移和重置。短文、中英混排、emoji、多行截断在多种列宽下与实际 SwiftUI 卡片高度对照。
-- `WeaveUITests/testLargeGalleryScrollPerformance` 使用 Debug 专用 `WEAVE_UI_TEST_GALLERY_COUNT=1000`，仅配合有效 `WEAVE_UI_TEST_SESSION` UUID 生效且只填充不存在的测试存储。测试记录 3 轮往返滚动的 wall clock、App CPU 与内存指标，保存到 xcresult。此指标包含自动化动作等待，不能当作帧耗时或 FPS；应在同设备、同工具链和同构建配置下比较。支持 10,000 条人工压力样本，但不默认扩大所有 UI 测试。
+- `YoursUITests/testLargeGalleryScrollPerformance` 使用 Debug 专用 `YOURS_UI_TEST_GALLERY_COUNT=1000`，仅配合有效 `YOURS_UI_TEST_SESSION` UUID 生效且只填充不存在的测试存储。测试记录 3 轮往返滚动的 wall clock、App CPU 与内存指标，保存到 xcresult。此指标包含自动化动作等待，不能当作帧耗时或 FPS；应在同设备、同工具链和同构建配置下比较。支持 10,000 条人工压力样本，但不默认扩大所有 UI 测试。
 
 ```sh
-xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/ui-gallery-macos -parallel-testing-enabled NO -only-testing:WeaveUITests/WeaveUITests/testLargeGalleryScrollPerformance CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
-xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-gallery-ios -parallel-testing-enabled NO -only-testing:WeaveUITests/WeaveUITests/testLargeGalleryScrollPerformance CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'platform=macOS' -derivedDataPath .build/ui-gallery-macos -parallel-testing-enabled NO -only-testing:YoursUITests/YoursUITests/testLargeGalleryScrollPerformance CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+xcodebuild -project Yours.xcodeproj -scheme Yours -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-gallery-ios -parallel-testing-enabled NO -only-testing:YoursUITests/YoursUITests/testLargeGalleryScrollPerformance CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
 ```
 
 界面回归仍需覆盖：快速往返滚动后打开正确记录、返回恢复位置、搜索/分类清空与重置、右键/长按移动、窗口宽度和 Dynamic Type 改变、浅深色、VoiceOver 与卡片 pointer。原生集成通过不代表 UI 自动化或全部辅助功能已验收；首次全库加载和首轮文本测量与稳态滚动分别报告。

@@ -1,12 +1,12 @@
 # Apple 原生界面设计规则
 
-适用于 Weave 的 macOS、iPadOS、iOS 界面设计、实现与走查。本文是基于 Apple 官方资料的项目适配规则，不是 Apple HIG 的全文，也不代表所有条目已实现或验收。核对日期：2026-09-27。
+适用于 Yours 的 macOS、iPadOS、iOS 界面设计、实现与走查。本文是基于 Apple 官方资料的项目适配规则，不是 Apple HIG 的全文，也不代表所有条目已实现或验收。核对日期：2026-09-27。
 
 优先级：用户确认的产品范围 → AGENTS / DESIGN / 本规则 → 第三方设计 skill。冲突时先保护数据、稳定输入和可访问性，再考虑视觉。当前产品尺寸和编辑排版的唯一基线在 [DESIGN](../../DESIGN.md)，本文不重复维护数值表。
 
 ## 1. 使用边界与来源
 
-- Apple 官方建议用于理解平台行为；下文的“必须”“不得”是 Weave 的执行约束，不应转述成 Apple 对所有 App 的要求。
+- Apple 官方建议用于理解平台行为；下文的“必须”“不得”是 Yours 的执行约束，不应转述成 Apple 对所有 App 的要求。
 - 本文统一维护原生视觉与交互规则，动效细节也在本文中，不依赖额外的 Apple 设计 skill。Web 实现示例转译为原生行为约束，不保留 CSS / JavaScript 实现依赖。
 - 不直接照搬 CSS、10 px 手势阈值、统一弹簧参数、放大模糊/阴影等示例。原生组件优先使用系统反馈、手势识别与材质。
 - 按下时给反馈，操作按原生控件的提交规则执行；“立即反馈”不等于按下就执行删除等操作。
@@ -83,8 +83,8 @@
 
 - 优先原生 Button、Toggle、菜单、List 和文本控件。自定义外观必须保留角色、可访问值、焦点和键盘操作，不能只给 Text 加点击手势模拟按钮。
 - 对每种交互检查：普通、悬停、按下、选中、键盘焦点、禁用、进行中、失败及窗口失焦。不是每个控件都需新增全部状态，但存在的状态应可辨且不改变布局。
-- 热区与可见外观分开设计；触控入口以至少 44×44 pt 作为 Weave 基线，小图标可扩充不可见热区，热区不得互相抢占。Mac 使用适合指针的原生控件尺寸，不把整套 UI 强制扩大到触控密度。
-- 手型范围遵循 DESIGN 的用户约定；它是 Weave 规则，不是“Apple 所有控件都必须手型”。正文保留 I 形光标，分隔线保留调整尺寸语义。
+- 热区与可见外观分开设计；触控入口以至少 44×44 pt 作为 Yours 基线，小图标可扩充不可见热区，热区不得互相抢占。Mac 使用适合指针的原生控件尺寸，不把整套 UI 强制扩大到触控密度。
+- 手型范围遵循 DESIGN 的用户约定；它是 Yours 规则，不是“Apple 所有控件都必须手型”。正文保留 I 形光标，分隔线保留调整尺寸语义。
 - 不把操作只藏在 hover、右键或长按里；必要操作同时提供可发现的菜单、按钮或键盘路径。不能依赖鼠标提示满足触控或 VoiceOver 使用。
 - 按钮写清动作。进行中的动作防止重复执行，长任务提供状态和有意义的取消；成功反馈应就近且适量。
 
@@ -108,7 +108,7 @@
 - 正文和必要操作遵守系统安全区、布局边距；背景可以延展，但不能让按钮被传感器、系统栏或屏幕边缘遮挡。不要把 Mac 的 4 pt 窗口外边距移植为手机内容边距。
 - 键盘显示、隐藏及交互式收起时，插入点、选区和必要操作保持可达；不写死键盘高度，不重复累加系统已经处理的 inset。
 
-依据：[Layout](https://developer.apple.com/design/human-interface-guidelines/layout)、[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview)、[Safe area](https://developer.apple.com/documentation/uikit/positioning-content-relative-to-the-safe-area)。编辑会话与 4 pt 的限制是 Weave 项目规则。
+依据：[Layout](https://developer.apple.com/design/human-interface-guidelines/layout)、[NavigationSplitView](https://developer.apple.com/documentation/swiftui/navigationsplitview)、[Safe area](https://developer.apple.com/documentation/uikit/positioning-content-relative-to-the-safe-area)。编辑会话与 4 pt 的限制是 Yours 项目规则。
 
 ### 7.2 iPadOS：窗口、输入与多任务
 
@@ -116,7 +116,7 @@
 - 保留系统窗口控制和操作空间，不用自制窗口按钮代替；前缘导航或工具栏项目不得与窗口控制重叠。新窗口应有明确任务价值，不因普通导航不断创建窗口。
 - 触控、硬件键盘和指针均能完成主要任务；悬停只能增强反馈，不能成为操作的唯一入口。检查焦点、快捷键、文本选择和拖动的竞争关系。
 - 对停靠、浮动及未停靠键盘分别检查。UIKit 桥接可用 `UIKeyboardLayoutGuide`，需跟随浮动键盘时评估 `followsUndockedKeyboard`；它不是所有界面都应开启的开关。
-- Weave 的编辑保护要求：窗口变窄、失焦或转入后台不能丢失未保存正文、组合输入及当前记录；若后续接入多窗口，每个窗口的导航与临时呈现独立，保存冲突另行设计。规则不表示当前已具备多窗口能力。
+- Yours 的编辑保护要求：窗口变窄、失焦或转入后台不能丢失未保存正文、组合输入及当前记录；若后续接入多窗口，每个窗口的导航与临时呈现独立，保存冲突另行设计。规则不表示当前已具备多窗口能力。
 
 依据：[Windows](https://developer.apple.com/design/human-interface-guidelines/windows)、[Elevate the design of your iPad app](https://developer.apple.com/videos/play/wwdc2025/208/)、[Pointing devices](https://developer.apple.com/design/human-interface-guidelines/pointing-devices)、[键盘布局示例](https://developer.apple.com/documentation/uikit/adjusting-your-layout-with-keyboard-layout-guide)。
 
@@ -137,7 +137,7 @@ Apple 已提供 iPhone Duo 的专门指导；以下是对这些资料的项目�
 
 技术依据：[Strike a pose with adaptive layouts on iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111463/)。
 
-Weave 当前状态：这些是设计与验收要求，折叠专用 API 尚未接入、设备交互尚未验收。继续使用现有原生编辑桥接，展开/收拢必须保护记录身份、中文组合输入、UTF-16 选区、撤销、滚动位置及保存；本条是项目编辑器约束。
+Yours 当前状态：这些是设计与验收要求，折叠专用 API 尚未接入、设备交互尚未验收。继续使用现有原生编辑桥接，展开/收拢必须保护记录身份、中文组合输入、UTF-16 选区、撤销、滚动位置及保存；本条是项目编辑器约束。
 
 ## 8. 键盘、焦点与原生编辑
 

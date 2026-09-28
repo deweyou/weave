@@ -1,6 +1,6 @@
-# Weave
+# Yours
 
-用中文沟通。Weave 是面向 macOS、iPadOS、iOS 的原生个人工作空间，第一期为本地富文本编辑器。CloudKit、独立待办模型和画板是后续方向；可勾选文本标记已经实现。
+用中文沟通。Yours 是面向 macOS、iPadOS、iOS 的原生个人工作空间，第一期为本地富文本编辑器。CloudKit、独立待办模型和画板是后续方向；可勾选文本标记已经实现。
 
 ## 开始工作
 
@@ -24,7 +24,7 @@
 
 ## Swift 规则与 skills
 
-编写或评审 Swift 代码前读取 [Weave Swift 代码规范](.agents/rules/swift-code-style.md)。
+编写或评审 Swift 代码前读取 [Yours Swift 代码规范](.agents/rules/swift-code-style.md)。
 它与本文件共同构成仓库约束，并优先于第三方 skill 的通用建议。
 
 - SwiftUI 状态、视图组合、性能、无障碍或 macOS 场景任务使用

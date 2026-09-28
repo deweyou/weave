@@ -7,7 +7,7 @@
 | 复制粘贴测试 Markdown | [无图片样本](examples/markdown-paste-sample.md) | 复制文件原始文本，粘贴到正文；步骤见[验证](verification.md#markdown-粘贴样本) |
 | 查看 Markdown 全集与实际效果 | [效果手册](examples/markdown-showcase.md) | Mac 复制正文粘贴、移动端可导入；已支持能力与兼容性对照分开标注 |
 | 本期做什么、未来做什么 | [产品](product.md)、[本期规格](specs/first-release.md) | 用户本次范围 |
-| 代码在哪里、数据如何保存 | [架构](architecture.md) | `Sources/Weave` |
+| 代码在哪里、数据如何保存 | [架构](architecture.md) | `Sources/Yours` |
 | Mac 底板与双栏卡片、跨设备布局、正文样式和原生交互怎么设计 | [设计](../DESIGN.md) | 当前 App、[原生设计规则](../.agents/rules/apple-native-design.md) |
 | Apple 原生 UI 规则、同心圆角、iOS / iPadOS / 折叠形态与视觉走查 | [设计规则](../.agents/rules/apple-native-design.md) | [设计基线](../DESIGN.md)、[验证](verification.md) |
 | 按钮、链接和可点击区域的 pointer 规则 | [光标设计约定](../DESIGN.md#可点击区域的光标全局约定) | [指针验收](verification.md#可点击区域的指针验收) |
