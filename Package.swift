@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "Weave",
+    name: "Yours",
     defaultLocalization: "zh-Hans",
     platforms: [.macOS(.v26), .iOS(.v26)],
-    products: [.executable(name: "Weave", targets: ["Weave"])],
+    products: [.executable(name: "Yours", targets: ["Yours"])],
     targets: [
         .executableTarget(
-            name: "Weave",
+            name: "Yours",
             resources: [.copy("Resources/CodeFormatting"), .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj")]),
-        .testTarget(name: "WeaveTests", dependencies: ["Weave"]),
+        .testTarget(name: "YoursTests", dependencies: ["Yours"]),
     ]
 )

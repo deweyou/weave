@@ -1,4 +1,6 @@
-# Weave
+# Yours
+
+**Yours. Truly yours.**
 
 面向 Mac、iPad 和 iPhone 的原生个人工作空间。
 
@@ -8,21 +10,21 @@
 
 要求 Xcode 26.2 或兼容版本，macOS / iOS 26 及以上，无第三方依赖。
 
-打开 `Weave.xcodeproj`，选择 Weave scheme 和目标设备运行。真机需要配置开发团队。
+打开 `Yours.xcodeproj`，选择 Yours scheme 和目标设备运行。真机需要配置开发团队。
 
 ```sh
 swift test
-xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build
-open .build/xcode/Build/Products/Debug/Weave.app
+xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build
+open .build/xcode/Build/Products/Debug/Yours.app
 ```
 
 移动端编译检查：
 
 ```sh
-xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build
 ```
 
-记录保存在应用容器 Application Support 下的 `Weave/notes.json`，每次修改原子写入。Swift Package 直接运行与 Xcode App 的存储位置可能因沙箱不同而不同；日常体验请运行 Xcode 构建的 App。
+记录保存在应用容器 Application Support 下的 `Yours/notes.json`，每次修改原子写入。Swift Package 直接运行与 Xcode App 的存储位置可能因沙箱不同而不同；日常体验请运行 Xcode 构建的 App。
 文件损坏时暂停编辑，保存失败时保留当前进程内的内容并显示重试；未保存成功前不要退出应用。
 
 ## 富文本与 Markdown

@@ -66,19 +66,19 @@ nodes:
   macos-ui-tests:
     kind: command
     description: 执行 macOS 原生 UI 自动化；使用 Debug 专用隔离数据，覆盖编辑、重启恢复、快捷语法和撤销。
-    command: xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/ui-macos -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+    command: xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'platform=macOS' -derivedDataPath .build/ui-macos -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
   ios-ui-tests:
     kind: command
     description: 在本机可用 iPhone 模拟器上执行新建、编辑、重启恢复和 Markdown 冒烟测试。
-    command: xcodebuild -project Weave.xcodeproj -scheme Weave -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-ios -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
+    command: xcodebuild -project Yours.xcodeproj -scheme Yours -destination "platform=iOS Simulator,id=$(python3 scripts/select_simulator.py)" -derivedDataPath .build/ui-ios -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
   macos-build:
     kind: command
     description: Mac 或共享源码变化时验证 macOS target 编译。
-    command: xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build
+    command: xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'platform=macOS' -derivedDataPath .build/xcode CODE_SIGNING_ALLOWED=NO build
   ios-build:
     kind: command
     description: iOS 或共享源码变化时验证 iOS Simulator target 编译，不代表真机运行。
-    command: xcodebuild -project Weave.xcodeproj -scheme Weave -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build
+    command: xcodebuild -project Yours.xcodeproj -scheme Yours -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build
   interaction-review:
     kind: agent
     description: UI 或输入行为变化后在实际 App 执行受影响操作；依据验证清单记录证据和未测试平台。
